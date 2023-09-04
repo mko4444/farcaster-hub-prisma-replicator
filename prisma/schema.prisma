@@ -1,0 +1,102 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ReactionType {
+  REACTION_TYPE_NONE // 0
+  REACTION_TYPE_LIKE // 1
+  REACTION_TYPE_RECAST // 2
+}
+
+model Cast {
+  hash               String     @id @unique
+  created_at         BigInt
+  updated_at         BigInt
+  deleted_at         BigInt?
+  timestamp          BigInt?
+  parent_hash        String?
+  parent_url         String?
+  text               String?
+  fid                Int
+  mentions_positions Int[]
+  embedded_urls      String[]
+  embedded_casts     Cast[]     @relation("CastEmbeds")
+  embedded_in        Cast[]     @relation("CastEmbeds")
+  parent             Cast?      @relation("CastReplies", fields: [parent_hash], references: [hash])
+  author             User       @relation(name: "CastAuthor", fields: [fid], references: [fid])
+  mentions           User[]     @relation("CastMentionedBy")
+  reactions          Reaction[] @relation("CastLikedBy")
+  replies            Cast[]     @relation("CastReplies")
+}
+
+model Reaction {
+  id          String       @id @unique @default(uuid())
+  type        ReactionType @default(REACTION_TYPE_NONE)
+  created_at  BigInt
+  updated_at  BigInt
+  deleted_at  BigInt?
+  timestamp   BigInt
+  fid         Int
+  hash        String
+  target_url  String?
+  target_hash String?
+  target_fid  Int?
+  author      User         @relation(name: "ReactionAuthor", fields: [fid], references: [fid])
+  cast        Cast?        @relation(name: "CastLikedBy", fields: [hash], references: [hash])
+  user        User?        @relation(name: "ReactionUserTarget", fields: [target_fid], references: [fid])
+}
+
+model User {
+  fid             Int            @id @unique
+  created_at      BigInt
+  updated_at      BigInt
+  deleted_at      BigInt?
+  fname           String?
+  pfp_url         String?
+  bio             String?
+  display_name    String?
+  custody_address String?
+  url             String?
+  casts           Cast[]         @relation("CastAuthor")
+  mentioned_in    Cast[]         @relation("CastMentionedBy")
+  reactions       Reaction[]     @relation("ReactionAuthor")
+  reacted_to      Reaction[]     @relation("ReactionUserTarget")
+  verifications   Verification[]
+  links           Link[]         @relation("LinkAuthor")
+  link_targets    Link[]         @relation("LinkTarget")
+}
+
+model Verification {
+  id           String  @id @unique @default(uuid())
+  created_at   BigInt
+  updated_at   BigInt
+  deleted_at   BigInt?
+  timestamp    BigInt
+  hash         String
+  fid          Int
+  address      String
+  ethSignature String
+  blockHash    String
+  user         User    @relation(fields: [fid], references: [fid])
+}
+
+model Link {
+  hash       String  @id @unique
+  created_at BigInt
+  updated_at BigInt
+  deleted_at BigInt?
+  timestamp  BigInt
+  type       String
+  fid        Int
+  target_fid Int
+  author     User    @relation(name: "LinkAuthor", fields: [fid], references: [fid])
+  target     User    @relation(name: "LinkTarget", fields: [target_fid], references: [fid])
+}
