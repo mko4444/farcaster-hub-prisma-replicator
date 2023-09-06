@@ -107,3 +107,10 @@ model UserDataMessage {
   fid        Int
   author     User     @relation(fields: [fid], references: [fid])
 }
+
+model HubSubscription {
+  url           String   @id @unique
+  last_event_id BigInt
+  created_at    DateTime @default(now())
+  updated_at    DateTime @default(now())
+}

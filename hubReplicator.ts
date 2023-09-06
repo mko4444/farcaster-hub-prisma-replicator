@@ -1,9 +1,18 @@
 import fastq, { queueAsPromised } from "fastq";
 import prettyMilliseconds from "pretty-ms";
 import os from "node:os";
-import { HubRpcClient, fromFarcasterTime, getInsecureHubRpcClient, getSSLHubRpcClient } from "@farcaster/hub-nodejs";
+import {
+  HubRpcClient,
+  fromFarcasterTime,
+  getInsecureHubRpcClient,
+  getSSLHubRpcClient,
+  isMergeMessageHubEvent,
+  isPruneMessageHubEvent,
+  isRevokeMessageHubEvent,
+} from "@farcaster/hub-nodejs";
 import { bytesToHexString } from "./helpers/bytesToHexString";
 import { Cast, Link, Prisma, PrismaClient, Reaction, User, UserDataMessage, Verification } from "@prisma/client";
+import { HubSubscriber } from "./hubSubscriber";
 import {
   constructParent,
   constructEmbeddedCasts,
@@ -13,33 +22,64 @@ import {
   constructReactionType,
 } from "./helpers/constructs";
 import dayjs from "dayjs";
+import { Logger } from "pino";
 
 const MAX_JOB_CONCURRENCY = Number(process.env["MAX_CONCURRENCY"]) || os.cpus().length;
 const MAX_PAGE_SIZE = 3_000;
 
 export class PrismaHubReplicator {
   private client: HubRpcClient;
+  private subscriber: HubSubscriber;
   private prisma: PrismaClient;
 
-  constructor(private hubAddress: string, private ssl: boolean) {
-    this.client = this.ssl ? getSSLHubRpcClient(hubAddress) : getInsecureHubRpcClient(hubAddress);
+  constructor(private hub_address: string, private ssl: boolean, private log: Logger) {
+    this.client = this.ssl ? getSSLHubRpcClient(hub_address) : getInsecureHubRpcClient(hub_address);
+    this.subscriber = new HubSubscriber(this.client, log);
     this.prisma = new PrismaClient();
+
+    this.subscriber.on("event", async (hubEvent) => {
+      if (isMergeMessageHubEvent(hubEvent)) {
+        this.log.info(`[Sync] Processing merge event ${hubEvent.id} from stream`);
+        await this.onMergeMessages([hubEvent.mergeMessageBody.message]);
+      } else if (isPruneMessageHubEvent(hubEvent)) {
+        this.log.info(`[Sync] Processing prune event ${hubEvent.id}`);
+        await this.onMergeMessages([hubEvent.pruneMessageBody.message]);
+      } else if (isRevokeMessageHubEvent(hubEvent)) {
+        this.log.info(`[Sync] Processing revoke event ${hubEvent.id}`);
+        await this.onMergeMessages([hubEvent.revokeMessageBody.message]);
+      } else {
+      }
+      // Keep track of how many events we've processed.
+      await this.prisma.hubSubscription.upsert({
+        where: { url: this.hub_address },
+        create: { url: this.hub_address, last_event_id: hubEvent.id },
+        update: { last_event_id: hubEvent.id },
+      });
+    });
   }
 
   public async start() {
     const infoResult = await this.client.getInfo({ dbStats: true });
 
     if (infoResult.isErr() || infoResult.value.dbStats === undefined) {
-      throw new Error(`Unable to get information about hub ${this.hubAddress}`);
+      throw new Error(`Unable to get information about hub ${this.hub_address}`);
     }
 
     const { numMessages } = infoResult.value.dbStats;
 
     // Not technically true, since hubs don't return CastRemove/etc. messages,
     // but at least gives a rough ballpark of order of magnitude.
-    console.info(`[Backfill] Fetching messages from hub ${this.hubAddress} (~${numMessages} messages)`);
+    console.info(`[Backfill] Fetching messages from hub ${this.hub_address} (~${numMessages} messages)`);
 
-    await this.backfill();
+    // Process live events going forward, starting from the last event we
+    // processed (if there was one).
+    const subscription = await this.prisma.hubSubscription.findUnique({
+      where: { url: this.hub_address },
+    });
+
+    this.subscriber.start(Number(subscription?.last_event_id));
+
+    // await this.backfill();
   }
 
   private async backfill() {
@@ -385,11 +425,9 @@ export class PrismaHubReplicator {
             await this.prismaSaveVerification(this.parseVerificationRemoveMessage(...parseProps));
             break;
           case 9:
-            // console.log(9, ...parseProps);
             // parsedMessage = this.parseSignerAddMessage(...parseProps);
             break;
           case 10:
-            // console.log(10, ...parseProps);
             // parsedMessage = this.parseSignerRemoveMessage(...parseProps);
             break;
           case 11: // user data add
