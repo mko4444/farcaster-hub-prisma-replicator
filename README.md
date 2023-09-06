@@ -1,12 +1,16 @@
-# farcaster-hub-prisma-replicator
- store farcaster hub data in a way that makes it easy to query via prisma
+# Farcaster Hub Replicator
 
-backfill + streaming all offchain events is finished
+This hub replicator is different from the WC team's in two ways:
+- tables have relations wherever possible, making complex queries via prisma or graphql easier
+- the database schema is more akin to the WC api than the hub message format (aka, easier to work with)
 
-needs to be implemented:
-- signer add / remove
-- any onchain events
-- username proofs
+Finished:
+backfill + streaming all cast, reaction, link, verification, and user data events
+
+to-do:
+- signer add / remove (backfill + streaming)
+- handle any onchain events (backfill + streaming)
+- username proofs (backfill + streaming)
 - thread hash
 - location (via a cron job calling Warpcast API for now)
 - deploy instructions
