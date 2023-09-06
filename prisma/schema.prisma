@@ -18,10 +18,10 @@ enum ReactionType {
 
 model Cast {
   hash               String     @id @unique
-  created_at         BigInt
-  updated_at         BigInt
-  deleted_at         BigInt?
-  timestamp          BigInt?
+  created_at         DateTime   @default(now())
+  updated_at         DateTime   @default(now())
+  deleted_at         DateTime?
+  timestamp          DateTime?
   parent_hash        String?
   parent_url         String?
   text               String?
@@ -38,65 +38,72 @@ model Cast {
 }
 
 model Reaction {
-  id          String       @id @unique @default(uuid())
+  hash        String       @id @unique
   type        ReactionType @default(REACTION_TYPE_NONE)
-  created_at  BigInt
-  updated_at  BigInt
-  deleted_at  BigInt?
-  timestamp   BigInt
+  created_at  DateTime     @default(now())
+  updated_at  DateTime     @default(now())
+  deleted_at  DateTime?
+  timestamp   DateTime
   fid         Int
-  hash        String
-  target_url  String?
   target_hash String?
-  target_fid  Int?
+  target_url  String?
   author      User         @relation(name: "ReactionAuthor", fields: [fid], references: [fid])
-  cast        Cast?        @relation(name: "CastLikedBy", fields: [hash], references: [hash])
-  user        User?        @relation(name: "ReactionUserTarget", fields: [target_fid], references: [fid])
+  cast        Cast?        @relation(name: "CastLikedBy", fields: [target_hash], references: [hash])
 }
 
 model User {
-  fid             Int            @id @unique
-  created_at      BigInt
-  updated_at      BigInt
-  deleted_at      BigInt?
+  fid             Int               @id @unique
+  created_at      DateTime          @default(now())
+  updated_at      DateTime          @default(now())
+  deleted_at      DateTime?
   fname           String?
   pfp_url         String?
   bio             String?
   display_name    String?
   custody_address String?
   url             String?
-  casts           Cast[]         @relation("CastAuthor")
-  mentioned_in    Cast[]         @relation("CastMentionedBy")
-  reactions       Reaction[]     @relation("ReactionAuthor")
-  reacted_to      Reaction[]     @relation("ReactionUserTarget")
+  casts           Cast[]            @relation("CastAuthor")
+  mentioned_in    Cast[]            @relation("CastMentionedBy")
+  reactions       Reaction[]        @relation("ReactionAuthor")
   verifications   Verification[]
-  links           Link[]         @relation("LinkAuthor")
-  link_targets    Link[]         @relation("LinkTarget")
+  links           Link[]            @relation("LinkAuthor")
+  link_targets    Link[]            @relation("LinkTarget")
+  profileUpdates  UserDataMessage[]
 }
 
 model Verification {
-  id           String  @id @unique @default(uuid())
-  created_at   BigInt
-  updated_at   BigInt
-  deleted_at   BigInt?
-  timestamp    BigInt
-  hash         String
-  fid          Int
-  address      String
-  ethSignature String
-  blockHash    String
-  user         User    @relation(fields: [fid], references: [fid])
+  hash          String    @id @unique
+  created_at    DateTime  @default(now())
+  updated_at    DateTime  @default(now())
+  deleted_at    DateTime?
+  timestamp     DateTime
+  fid           Int
+  address       String
+  eth_signature String
+  block_hash    String
+  author        User      @relation(fields: [fid], references: [fid])
 }
 
 model Link {
-  hash       String  @id @unique
-  created_at BigInt
-  updated_at BigInt
-  deleted_at BigInt?
-  timestamp  BigInt
-  type       String
+  hash        String    @id @unique
+  created_at  DateTime  @default(now())
+  updated_at  DateTime  @default(now())
+  deleted_at  DateTime?
+  timestamp   DateTime
+  type        String
+  fid         Int
+  target_fid  Int
+  author      User      @relation(name: "LinkAuthor", fields: [fid], references: [fid])
+  target_user User      @relation(name: "LinkTarget", fields: [target_fid], references: [fid])
+}
+
+model UserDataMessage {
+  hash       String   @id @unique
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now())
+  timestamp  DateTime
+  type       Int
+  value      String
   fid        Int
-  target_fid Int
-  author     User    @relation(name: "LinkAuthor", fields: [fid], references: [fid])
-  target     User    @relation(name: "LinkTarget", fields: [target_fid], references: [fid])
+  author     User     @relation(fields: [fid], references: [fid])
 }

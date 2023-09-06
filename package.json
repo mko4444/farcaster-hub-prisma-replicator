@@ -14,7 +14,9 @@
     "@farcaster/hub-nodejs": "^0.10.5",
     "@prisma/client": "^5.2.0",
     "dayjs": "^1.11.9",
+    "fastq": "^1.15.0",
     "pino": "^8.15.0",
+    "pretty-ms": "^8.0.0",
     "prisma": "^5.2.0",
     "tiny-typed-emitter": "^2.1.0",
     "tsx": "^3.12.5"

@@ -1,11 +1,11 @@
-import { backfillCasts } from "./functions/backfill/backfillCasts";
-import { backfillUserData } from "./functions/backfill/backfillUserData";
+import { HUB_HOST, HUB_SSL } from "./constants";
+import { PrismaHubReplicator } from "./hubReplicator";
+
+let replicator: PrismaHubReplicator | undefined;
 
 (async () => {
-  //   await backfillCasts();
-  await backfillUserData();
-
-  process.exit(0);
+  replicator = new PrismaHubReplicator(HUB_HOST, HUB_SSL);
+  replicator.start();
 })();
 
 process.on("exit", (code) => {
