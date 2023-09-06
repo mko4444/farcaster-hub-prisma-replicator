@@ -1,10 +1,11 @@
 import { HUB_HOST, HUB_SSL } from "./constants";
 import { PrismaHubReplicator } from "./hubReplicator";
+import { log } from "./log";
 
 let replicator: PrismaHubReplicator | undefined;
 
 (async () => {
-  replicator = new PrismaHubReplicator(HUB_HOST, HUB_SSL);
+  replicator = new PrismaHubReplicator(HUB_HOST, HUB_SSL, log);
   replicator.start();
 })();
 
