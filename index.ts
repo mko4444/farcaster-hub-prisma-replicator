@@ -1,10 +1,8 @@
 import { PrismaHubReplicator } from "./hubReplicator";
 import { HUB_HOST, HUB_SSL } from "./constants";
 import { log } from "./log";
-import { PrismaClient } from "@prisma/client";
 
 let replicator: PrismaHubReplicator | undefined;
-let prisma = new PrismaClient();
 
 const shutdown = async () => {
   if (replicator) {
@@ -30,6 +28,6 @@ for (const signal of ["SIGTERM", "SIGINT"]) {
 }
 
 (async () => {
-  replicator = new PrismaHubReplicator(HUB_HOST, HUB_SSL, log, prisma);
+  replicator = new PrismaHubReplicator(HUB_HOST, HUB_SSL, log);
   replicator.start();
 })();

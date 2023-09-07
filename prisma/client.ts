@@ -1,2 +1,7 @@
 import { PrismaClient } from "@prisma/client";
-export default PrismaClient;
+
+let prisma = new PrismaClient();
+
+export default prisma;
+
+export { PrismaClient };
