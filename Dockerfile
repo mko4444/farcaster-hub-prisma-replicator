@@ -1,26 +1,25 @@
-# Use the official Node.js 16 image as a base image
+# Use the official Node.js 16 image from the DockerHub
 FROM node:16
 
-# Install Python and other dependencies
-RUN apt-get update && apt-get install -y python3
-
-# Create a working directory.
+# Set up the working directory
 WORKDIR /usr/src/app
 
-# Copy package.json and package-lock.json (if available) to the working directory
+# Copy package.json and package-lock.json before other files
+# Utilize Docker cache to save re-installing dependencies if unchanged
 COPY package*.json ./
 
-# Install npm packages
+# Install necessary npm packages
 RUN npm install
 
-# Copy the prisma directory (which contains schema.prisma) into the container
-COPY ./prisma ./prisma
+# Copy the local files to the container's workspace
+COPY . .
 
 # Run the Prisma setup script to migrate tables
 RUN npm run setup
 
-# Copy the rest of the local files to the container's workspace.
-COPY . .
+# Set up your environment variables
+# (assuming you've got a .env file in your project directory)
+COPY .env .env
 
-# Command to run the script
+# Run your script
 CMD [ "npm", "run", "start" ]
