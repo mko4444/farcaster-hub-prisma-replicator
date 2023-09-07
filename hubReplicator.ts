@@ -125,6 +125,7 @@ export class PrismaHubReplicator {
   }
   private async backfill() {
     const maxFidResult = await this.client.getFids({ pageSize: 1, reverse: true });
+    const backfilled = await prisma.user.findMany({ where: { has_backfilled: true }, select: { fid: true } });
     if (maxFidResult.isErr()) throw new Error("Unable to get max fid for backfill");
 
     const maxFid = maxFidResult.value.fids[0];
@@ -132,7 +133,14 @@ export class PrismaHubReplicator {
     const startTime = Date.now();
 
     const queue: queueAsPromised<{ fid: number }> = fastq.promise(async ({ fid }) => {
+      if (backfilled.find((u) => u.fid === fid)) {
+        console.info(`[Backfill] Skipping FID ${fid} because it has already been backfilled`);
+        return;
+      }
       await this.processAllMessagesForFid(fid);
+
+      await prisma.user.update({ where: { fid }, data: { has_backfilled: true } });
+
       totalProcessed += 1;
       const elapsedMs = Date.now() - startTime;
       const millisRemaining = Math.ceil((elapsedMs / totalProcessed) * (maxFid - totalProcessed));

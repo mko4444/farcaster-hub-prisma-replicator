@@ -62,6 +62,7 @@ model User {
   display_name    String?
   custody_address String?
   url             String?
+  has_backfilled  Boolean           @default(false)
   casts           Cast[]            @relation("CastAuthor")
   mentioned_in    Cast[]            @relation("CastMentionedBy")
   reactions       Reaction[]        @relation("ReactionAuthor")
