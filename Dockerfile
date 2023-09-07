@@ -4,6 +4,12 @@ FROM node:16
 # Set up the working directory
 WORKDIR /usr/src/app
 
+# Accept Railway's environment variables as arguments
+ARG DATABASE_URL
+
+# Set the environment variables
+ENV DATABASE_URL=$DATABASE_URL
+
 # Copy package.json and package-lock.json before other files
 # Utilize Docker cache to save re-installing dependencies if unchanged
 COPY package*.json ./
@@ -14,11 +20,8 @@ RUN npm install
 # Copy the local files to the container's workspace
 COPY . .
 
-# Copy your setup script
-COPY setup.sh ./
-
-# Make the setup script executable and run it
-RUN chmod +x ./setup.sh
+# Run the setup script which will conditionally use values from .env file if present
+COPY setup.sh .
 RUN ./setup.sh
 
 # Run your script
