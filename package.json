@@ -1,18 +1,20 @@
 {
-  "name": "farcaster-postgres-replicator",
+  "name": "farcaster-hub-prisma-replicator",
   "version": "1.0.0",
   "description": "replicates data from farcaster hubs to a postgres database with a user-friendly schema",
   "main": "index.js",
   "type": "module",
   "scripts": {
     "start": "tsx index.ts",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "setup": "npx prisma migrate dev --name init --preview-feature",
+    "reset": "npx prisma migrate reset --preview-feature"
   },
   "author": "",
   "license": "ISC",
   "dependencies": {
     "@farcaster/hub-nodejs": "^0.10.5",
     "@prisma/client": "^5.2.0",
+    "bufferutil": "^4.0.7",
     "dayjs": "^1.11.9",
     "fastq": "^1.15.0",
     "pino": "^8.15.0",
@@ -20,6 +22,7 @@
     "pretty-ms": "^8.0.0",
     "prisma": "^5.2.0",
     "tiny-typed-emitter": "^2.1.0",
-    "tsx": "^3.12.5"
+    "tsx": "^3.12.5",
+    "utf-8-validate": "^6.0.3"
   }
 }

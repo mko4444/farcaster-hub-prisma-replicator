@@ -1,8 +1,15 @@
 import fastq, { queueAsPromised } from "fastq";
 import prettyMilliseconds from "pretty-ms";
-import os from "node:os";
+import { upsertWithRetry } from "./helpers/upsertWithRetry";
 import {
+  CastAddBody,
+  CastRemoveBody,
   HubRpcClient,
+  LinkBody,
+  ReactionBody,
+  UserDataBody,
+  VerificationAddEthAddressBody,
+  VerificationRemoveBody,
   fromFarcasterTime,
   getInsecureHubRpcClient,
   getSSLHubRpcClient,
@@ -11,7 +18,7 @@ import {
   isRevokeMessageHubEvent,
 } from "@farcaster/hub-nodejs";
 import { bytesToHexString } from "./helpers/bytesToHexString";
-import { Cast, Link, Prisma, PrismaClient, Reaction, User, UserDataMessage, Verification } from "@prisma/client";
+import { PrismaClient } from "@prisma/client";
 import { HubSubscriber } from "./hubSubscriber";
 import {
   constructParent,
@@ -24,18 +31,17 @@ import {
 import dayjs from "dayjs";
 import { Logger } from "pino";
 
-const MAX_JOB_CONCURRENCY = Number(process.env["MAX_CONCURRENCY"]) || os.cpus().length;
-const MAX_PAGE_SIZE = 3_000;
+import { MAX_PAGE_SIZE, MAX_JOB_CONCURRENCY } from "./constants";
 
 export class PrismaHubReplicator {
   private client: HubRpcClient;
   private subscriber: HubSubscriber;
   private prisma: PrismaClient;
 
-  constructor(private hub_address: string, private ssl: boolean, private log: Logger) {
+  constructor(private hub_address: string, private ssl: boolean, private log: Logger, prisma: PrismaClient) {
     this.client = this.ssl ? getSSLHubRpcClient(hub_address) : getInsecureHubRpcClient(hub_address);
     this.subscriber = new HubSubscriber(this.client, log);
-    this.prisma = new PrismaClient();
+    this.prisma = prisma;
 
     this.subscriber.on("event", async (hubEvent) => {
       if (isMergeMessageHubEvent(hubEvent)) {
@@ -48,6 +54,7 @@ export class PrismaHubReplicator {
         this.log.info(`[Sync] Processing revoke event ${hubEvent.id}`);
         await this.onMergeMessages([hubEvent.revokeMessageBody.message]);
       } else {
+        // TODO: handle other types of events
       }
       // Keep track of how many events we've processed.
       await this.prisma.hubSubscription.upsert({
@@ -56,6 +63,15 @@ export class PrismaHubReplicator {
         update: { last_event_id: hubEvent.id },
       });
     });
+  }
+
+  public stop() {
+    this.prisma.$disconnect();
+    this.subscriber.stop();
+  }
+
+  public destroy() {
+    this.subscriber.destroy();
   }
 
   public async start() {
@@ -79,7 +95,7 @@ export class PrismaHubReplicator {
 
     this.subscriber.start(Number(subscription?.last_event_id));
 
-    // await this.backfill();
+    await this.backfill();
   }
 
   private async backfill() {
@@ -92,7 +108,6 @@ export class PrismaHubReplicator {
 
     const queue: queueAsPromised<{ fid: number }> = fastq.promise(async ({ fid }) => {
       await this.processAllMessagesForFid(fid);
-
       totalProcessed += 1;
       const elapsedMs = Date.now() - startTime;
       const millisRemaining = Math.ceil((elapsedMs / totalProcessed) * (maxFid - totalProcessed));
@@ -213,26 +228,28 @@ export class PrismaHubReplicator {
       result = await this.client.getUserDataByFid({ pageSize, pageToken, fid });
     }
   }
-  private parseCastAddMessage(body: any, hash: string, fid: number, timestamp: Date) {
+  private parseCastAddMessage(
+    { parentUrl: parent_url, text, mentions, mentionsPositions: mentions_positions, embeds, parentCastId }: CastAddBody,
+    hash: string,
+    fid: number,
+    timestamp: Date
+  ) {
     return {
       hash,
       timestamp,
-      parent_url: body.parentUrl,
-      text: body.text,
-      mentions_positions: body.mentionsPositions,
-      embedded_urls: body.embeds.map((c) => c.url)?.filter((f) => !!f),
-      parent: constructParent(
-        bytesToHexString(body?.parentCastId?.hash).value ?? undefined,
-        body?.parentCastId?.fid ?? undefined
-      ),
-      embedded_casts: constructEmbeddedCasts(body.embeds),
-      mentions: constructMentions(body.mentions),
+      parent_url,
+      text,
+      mentions_positions,
+      embedded_urls: embeds.map((embed) => embed.url).filter((f) => !!f) as string[],
+      parent: parentCastId ? constructParent(bytesToHexString(parentCastId.hash).value, parentCastId.fid) : undefined,
+      embedded_casts: constructEmbeddedCasts(embeds),
+      mentions: constructMentions(mentions),
       author: constructConnectUser(fid),
     };
   }
-  private parseCastRemoveMessage({ target_hash }: any, hash: string, fid: number, timestamp: Date) {
+  private parseCastRemoveMessage({ targetHash: hash }: CastRemoveBody, _: string, fid: number, timestamp: Date) {
     return {
-      hash: target_hash,
+      hash: bytesToHexString(hash).value,
       timestamp,
       deleted_at: timestamp,
       author: {
@@ -243,7 +260,7 @@ export class PrismaHubReplicator {
       },
     };
   }
-  private parseReactionAddMessage(body: any, hash: string, fid: number, timestamp: Date) {
+  private parseReactionAddMessage(body: ReactionBody, hash: string, fid: number, timestamp: Date) {
     return {
       hash,
       timestamp,
@@ -253,7 +270,7 @@ export class PrismaHubReplicator {
       author: constructConnectUser(fid),
     };
   }
-  private parseReactionRemoveMessage(body: any, hash: string, fid: number, timestamp: Date) {
+  private parseReactionRemoveMessage(body: ReactionBody, hash: string, fid: number, timestamp: Date) {
     return {
       hash,
       timestamp,
@@ -264,58 +281,45 @@ export class PrismaHubReplicator {
       author: constructConnectUser(fid),
     };
   }
-  private parseLinkAddMessage(body: any, hash: string, fid: number, timestamp: Date) {
+  private parseLinkAddMessage({ type, targetFid }: LinkBody, hash: string, fid: number, timestamp: Date) {
     return {
       hash,
       timestamp,
-      type: body.type,
-      author: constructConnectUser(fid),
-      target_user: constructConnectUser(body.targetFid),
-    };
-  }
-  private parseLinkRemoveMessage(body: any, hash: string, fid: number, timestamp: Date) {
-    return {
-      hash,
-      timestamp,
-      deleted_at: timestamp,
-      type: body.type,
-      author: constructConnectUser(fid),
-      target_user: constructConnectUser(body.targetFid),
-    };
-  }
-  private parseVerificationAddMessage(body: any, hash: string, fid: number, timestamp: Date) {
-    return {
-      timestamp,
-      hash,
-      address: bytesToHexString(body?.address).value,
-      eth_signature: bytesToHexString(body?.ethSignature).value,
-      block_hash: bytesToHexString(body?.blockHash).value,
-      author: constructConnectUser(fid),
-    };
-  }
-  private parseVerificationRemoveMessage(body: any, hash: string, fid: number, timestamp: Date) {
-    return {
-      timestamp,
-      hash,
-      deleted_at: timestamp,
-      address: bytesToHexString(body?.address).value,
-      eth_signature: bytesToHexString(body?.ethSignature).value,
-      block_hash: bytesToHexString(body?.blockHash).value,
-      author: constructConnectUser(fid),
-    };
-  }
-  private parseUserDataAddMessage(
-    {
       type,
-      value,
-    }: {
-      type: number;
-      value: string;
-    },
-    _: string,
-    fid: number,
-    __: Date
-  ) {
+      author: constructConnectUser(fid),
+      target_user: targetFid ? constructConnectUser(targetFid) : undefined,
+    };
+  }
+  private parseLinkRemoveMessage({ type, targetFid }: LinkBody, hash: string, fid: number, timestamp: Date) {
+    return {
+      hash,
+      timestamp,
+      deleted_at: timestamp,
+      type,
+      author: constructConnectUser(fid),
+      target_user: targetFid ? constructConnectUser(targetFid) : undefined,
+    };
+  }
+  private parseVerificationAddMessage(body: VerificationAddEthAddressBody, hash: string, fid: number, timestamp: Date) {
+    return {
+      timestamp,
+      hash,
+      address: bytesToHexString(body?.address).value,
+      eth_signature: bytesToHexString(body?.ethSignature).value,
+      block_hash: bytesToHexString(body?.blockHash).value,
+      author: constructConnectUser(fid),
+    };
+  }
+  private parseVerificationRemoveMessage(body: VerificationRemoveBody, hash: string, fid: number, timestamp: Date) {
+    return {
+      timestamp,
+      hash,
+      deleted_at: timestamp,
+      address: bytesToHexString(body?.address).value,
+      author: constructConnectUser(fid),
+    };
+  }
+  private parseUserDataAddMessage({ type, value }: UserDataBody, _: string, fid: number, __: Date) {
     return {
       fid,
       fname: type === 6 ? value : undefined,
@@ -325,18 +329,7 @@ export class PrismaHubReplicator {
       url: type === 5 ? value : undefined,
     };
   }
-  private parseUserDataMessage(
-    {
-      type,
-      value,
-    }: {
-      type: number;
-      value: string;
-    },
-    hash: string,
-    fid: number,
-    timestamp: Date
-  ) {
+  private parseUserDataMessage({ type, value }: UserDataBody, hash: string, fid: number, timestamp: Date) {
     return {
       hash,
       timestamp,
@@ -345,99 +338,70 @@ export class PrismaHubReplicator {
       author: constructConnectUser(fid),
     };
   }
-  async prismaSaveCast(o: Partial<Cast>) {
-    if (!o.hash) return undefined;
-    return this.prisma.cast.upsert({ where: { hash: o.hash }, create: o as Cast, update: o });
-  }
-  private async prismaSaveReaction(o: Partial<Reaction>) {
-    if (!o.hash) return undefined;
-    return this.prisma.reaction.upsert({ where: { hash: o.hash }, create: o as Reaction, update: o });
-  }
-  private prismaSaveLink(o: Partial<Link>) {
-    if (!o.hash) return undefined;
-    return this.prisma.link.upsert({ where: { hash: o.hash }, create: o as Link, update: o });
-  }
-  private prismaSaveVerification(o: Partial<Verification>) {
-    if (!o.hash) return undefined;
-    return this.prisma.verification.upsert({
-      where: { hash: o.hash },
-      create: o as Verification,
-      update: o,
-    });
-  }
-  private prismaSaveUserData(o: Partial<User>) {
-    if (!o.fid) return undefined;
-    return this.prisma.user.upsert({ where: { fid: o.fid }, create: o as User, update: o });
-  }
-  private prismaSaveUserDataMessage(o: Partial<UserDataMessage>) {
-    if (!o.hash) return undefined;
-    return this.prisma.userDataMessage.upsert({ where: { hash: o.hash }, create: o as UserDataMessage, update: o });
-  }
   private async onMergeMessages(messages: any[]) {
-    try {
-      for await (const message of messages) {
-        // @ts-ignore
-        let timestamp = dayjs(fromFarcasterTime(message.data?.timestamp).value).format();
-        // @ts-ignore
-        let hash = bytesToHexString(message.hash).value;
-        let fid = message.data?.fid;
-        let body =
-          message?.data?.castAddBody ||
-          message?.data?.castRemoveBody ||
-          message?.data?.reactionBody ||
-          message?.data?.verificationAddEthAddressBody ||
-          message?.data?.verificationRemoveBody ||
-          message?.data?.signerAddBody ||
-          message?.data?.userDataBody ||
-          message?.data?.signerRemoveBody ||
-          message?.data?.linkBody ||
-          message?.data?.usernameProofBody;
+    for (const message of messages) {
+      // @ts-ignore
+      let timestamp: Date = dayjs(fromFarcasterTime(message.data?.timestamp).value).format();
+      let hash = bytesToHexString(message.hash).value;
+      let fid = message.data?.fid;
+      let body =
+        message?.data?.castAddBody ||
+        message?.data?.castRemoveBody ||
+        message?.data?.reactionBody ||
+        message?.data?.verificationAddEthAddressBody ||
+        message?.data?.verificationRemoveBody ||
+        message?.data?.signerAddBody ||
+        message?.data?.userDataBody ||
+        message?.data?.signerRemoveBody ||
+        message?.data?.linkBody ||
+        message?.data?.usernameProofBody;
 
-        if (!hash) continue;
+      if (!hash) continue;
 
-        let parseProps: [any, string, number, any] = [body, hash, fid, timestamp];
+      let parseProps: [any, string, number, Date] = [body, hash, fid, timestamp];
 
-        switch (message.data.type) {
-          case 0:
-            break;
-          case 1: // cast add
-            await this.prismaSaveCast(this.parseCastAddMessage(...parseProps));
-            break;
-          case 2: // cast remove
-            await this.prismaSaveCast(this.parseCastRemoveMessage(...parseProps));
-            break;
-          case 3: // reaction add
-            await this.prismaSaveReaction(this.parseReactionAddMessage(...parseProps));
-            break;
-          case 4: // reaction remove
-            await this.prismaSaveReaction(this.parseReactionRemoveMessage(...parseProps));
-            break;
-          case 5: // link add
-            await this.prismaSaveLink(this.parseLinkAddMessage(...parseProps));
-            break;
-          case 6: // link remove
-            await this.prismaSaveLink(this.parseLinkRemoveMessage(...parseProps));
-            break;
-          case 7: // verification add
-            await this.prismaSaveVerification(this.parseVerificationAddMessage(...parseProps));
-            break;
-          case 8: // verification remove
-            await this.prismaSaveVerification(this.parseVerificationRemoveMessage(...parseProps));
-            break;
-          case 9:
-            // parsedMessage = this.parseSignerAddMessage(...parseProps);
-            break;
-          case 10:
-            // parsedMessage = this.parseSignerRemoveMessage(...parseProps);
-            break;
-          case 11: // user data add
-            await this.prismaSaveUserData(this.parseUserDataAddMessage(...parseProps));
-            await this.prismaSaveUserDataMessage(this.parseUserDataMessage(...parseProps));
-            break;
-        }
+      switch (message.data.type) {
+        case 0:
+          break;
+        case 1: // cast add
+          const cast = this.parseCastAddMessage(...parseProps);
+          await upsertWithRetry(this.prisma.cast, { hash }, cast, cast);
+          break;
+        case 2: // cast remove
+          const castRemove = this.parseCastRemoveMessage(...parseProps);
+          await upsertWithRetry(this.prisma.cast, { hash }, castRemove, castRemove);
+          break;
+        case 3: // reaction add
+          const reaction = this.parseReactionAddMessage(...parseProps);
+          await upsertWithRetry(this.prisma.reaction, { hash }, reaction, reaction);
+          break;
+        case 4: // reaction remove
+          const reactionRemove = this.parseReactionRemoveMessage(...parseProps);
+          await upsertWithRetry(this.prisma.reaction, { hash }, reactionRemove, reactionRemove);
+          break;
+        case 5: // link add
+          const link = this.parseLinkAddMessage(...parseProps);
+          await upsertWithRetry(this.prisma.link, { hash }, link, link);
+          break;
+        case 6: // link remove
+          const linkRemove = this.parseLinkRemoveMessage(...parseProps);
+          await upsertWithRetry(this.prisma.link, { hash }, linkRemove, linkRemove);
+          break;
+        case 7: // verification add
+          const verification = this.parseVerificationAddMessage(...parseProps);
+          await upsertWithRetry(this.prisma.verification, { hash }, verification, verification);
+          break;
+        case 8: // verification remove
+          const verificationRemove = this.parseVerificationRemoveMessage(...parseProps);
+          await upsertWithRetry(this.prisma.verification, { hash }, verificationRemove, verificationRemove);
+          break;
+        case 11: // user data add
+          const user_profile = this.parseUserDataAddMessage(...parseProps);
+          const user_message = this.parseUserDataMessage(...parseProps);
+          await upsertWithRetry(this.prisma.user, { fid: user_profile.fid! }, user_profile, user_profile);
+          await upsertWithRetry(this.prisma.userDataMessage, { hash }, user_message, user_message);
+          break;
       }
-    } catch (e) {
-      console.error(e);
     }
   }
 }

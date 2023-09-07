@@ -30,8 +30,8 @@ model Cast {
   embedded_urls      String[]
   embedded_casts     Cast[]     @relation("CastEmbeds")
   embedded_in        Cast[]     @relation("CastEmbeds")
-  parent             Cast?      @relation("CastReplies", fields: [parent_hash], references: [hash])
-  author             User       @relation(name: "CastAuthor", fields: [fid], references: [fid])
+  parent             Cast?      @relation("CastReplies", fields: [parent_hash], references: [hash], onUpdate: NoAction, onDelete: NoAction)
+  author             User       @relation(name: "CastAuthor", fields: [fid], references: [fid], onUpdate: NoAction, onDelete: NoAction)
   mentions           User[]     @relation("CastMentionedBy")
   reactions          Reaction[] @relation("CastLikedBy")
   replies            Cast[]     @relation("CastReplies")
@@ -47,8 +47,8 @@ model Reaction {
   fid         Int
   target_hash String?
   target_url  String?
-  author      User         @relation(name: "ReactionAuthor", fields: [fid], references: [fid])
-  cast        Cast?        @relation(name: "CastLikedBy", fields: [target_hash], references: [hash])
+  author      User         @relation(name: "ReactionAuthor", fields: [fid], references: [fid], onUpdate: NoAction, onDelete: NoAction)
+  cast        Cast?        @relation(name: "CastLikedBy", fields: [target_hash], references: [hash], onUpdate: NoAction, onDelete: NoAction)
 }
 
 model User {
@@ -81,7 +81,7 @@ model Verification {
   address       String
   eth_signature String
   block_hash    String
-  author        User      @relation(fields: [fid], references: [fid])
+  author        User      @relation(fields: [fid], references: [fid], onUpdate: NoAction, onDelete: NoAction)
 }
 
 model Link {
@@ -93,8 +93,8 @@ model Link {
   type        String
   fid         Int
   target_fid  Int
-  author      User      @relation(name: "LinkAuthor", fields: [fid], references: [fid])
-  target_user User      @relation(name: "LinkTarget", fields: [target_fid], references: [fid])
+  author      User      @relation(name: "LinkAuthor", fields: [fid], references: [fid], onUpdate: NoAction, onDelete: NoAction)
+  target_user User      @relation(name: "LinkTarget", fields: [target_fid], references: [fid], onUpdate: NoAction, onDelete: NoAction)
 }
 
 model UserDataMessage {
@@ -105,7 +105,7 @@ model UserDataMessage {
   type       Int
   value      String
   fid        Int
-  author     User     @relation(fields: [fid], references: [fid])
+  author     User     @relation(fields: [fid], references: [fid], onUpdate: NoAction, onDelete: NoAction)
 }
 
 model HubSubscription {

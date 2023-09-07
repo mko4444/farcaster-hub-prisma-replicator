@@ -1,4 +1,4 @@
-import { bytesToHexString } from "@farcaster/hub-nodejs";
+import { bytesToHexString } from "./bytesToHexString";
 import { ReactionType } from "@prisma/client";
 
 export function constructParent(hash?: string, fid?: number) {
@@ -22,11 +22,13 @@ export function constructEmbeddedCasts(embeds: any) {
   const parsed_embeds = embeds.map((c) => c.castId)?.filter((f) => !!f);
 
   if (!parsed_embeds?.[0]) return undefined;
-  // @ts-ignore
   const convert_hashes = parsed_embeds.map((e) => ({ ...e, hash: bytesToHexString(e.hash).value }));
+  const arr = convert_hashes.filter((f) => !!f?.hash && !!f?.fid);
+
+  if (arr.length === 0) return undefined;
 
   return {
-    connectOrCreate: convert_hashes.map(({ hash, fid }) => ({
+    connectOrCreate: arr.map(({ hash, fid }) => ({
       where: { hash },
       create: {
         hash,
@@ -41,7 +43,8 @@ export function constructEmbeddedCasts(embeds: any) {
   };
 }
 export function constructMentions(fids: number[]) {
-  if (!fids?.[0]) return undefined;
+  if (!!fids?.find((f) => !f)) return undefined;
+
   return {
     connectOrCreate: fids.map((fid) => ({
       where: { fid },
@@ -50,6 +53,7 @@ export function constructMentions(fids: number[]) {
   };
 }
 export function constructConnectUser(fid: number) {
+  if (!fid) return undefined;
   return {
     connectOrCreate: {
       where: { fid },
@@ -58,7 +62,6 @@ export function constructConnectUser(fid: number) {
   };
 }
 export function constructCast(cast?: { hash: Uint8Array; fid: number }) {
-  // @ts-ignore
   const hash = cast?.hash ? bytesToHexString(cast?.hash).value : undefined;
   const fid = cast?.fid;
 
