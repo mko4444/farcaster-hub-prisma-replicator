@@ -16,31 +16,30 @@ export function parseReactionRemoveMessage(body: ReactionBody, hash: string, fid
     target_url: body.targetUrl,
     type: reaction_types[body.type],
     cast: target_hash ? { connect: { hash: target_hash! } } : undefined,
-    author: { connect: { fid: fid! } },
+    author: { connect: { fid } },
   };
 
-  const fids_to_save = [fid, target_fid].filter((f) => !!f);
-  const hashes_to_save = [target_hash].filter((f) => !!f);
+  txs.push(prisma.user.upsert({ where: { fid }, create: { fid }, update: {} }));
 
-  txs.push(
-    ...fids_to_save.map((fid) => prisma.user.upsert({ where: { fid: fid! }, create: { fid: fid! }, update: {} }))
-  );
+  if (typeof target_fid === "number") {
+    txs.push(prisma.user.upsert({ where: { fid: target_fid }, create: { fid: target_fid }, update: {} }));
+  }
 
-  txs.push(
-    ...hashes_to_save.map((hash) =>
+  if (target_hash) {
+    txs.push(
       prisma.cast.upsert({
-        where: { hash: hash! },
-        create: { hash: hash!, author: { connect: { fid: fid! } } },
-        update: { hash: hash!, author: { connect: { fid: fid! } } },
+        where: { hash: target_hash },
+        create: { hash: target_hash, author: { connect: { fid: target_fid } } },
+        update: {},
       })
-    )
-  );
+    );
+  }
 
   txs.push(
     prisma.reaction.upsert({
-      where: { hash: prisma_obj.hash },
+      where: { hash },
       create: prisma_obj,
-      update: prisma_obj,
+      update: { ...prisma_obj, hash: undefined },
     })
   );
 

@@ -13,7 +13,9 @@ export function parseUserDataAddMessage({ type, value }: UserDataBody, hash: str
   };
 
   txs.push(prisma.user.upsert({ where: { fid }, create: { fid }, update: {} }));
-  txs.push(prisma.userDataMessage.upsert({ where: { hash }, create: prisma_obj, update: prisma_obj }));
+  txs.push(
+    prisma.userDataMessage.upsert({ where: { hash }, create: prisma_obj, update: { ...prisma_obj, hash: undefined } })
+  );
 
   return txs;
 }

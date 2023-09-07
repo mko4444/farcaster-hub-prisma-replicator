@@ -16,11 +16,17 @@ export function parseVerificationAddMessage(
     address: bytesToHexString(body?.address).value,
     eth_signature: bytesToHexString(body?.ethSignature).value,
     block_hash: bytesToHexString(body?.blockHash).value,
-    author: { connect: { fid: fid! } },
+    author: { connect: { fid } },
   };
 
-  txs.push(prisma.user.upsert({ where: { fid: fid! }, create: { fid: fid! }, update: {} }));
-  txs.push(prisma.verification.upsert({ where: { hash: hash! }, create: prisma_obj, update: prisma_obj }));
+  txs.push(prisma.user.upsert({ where: { fid }, create: { fid }, update: {} }));
+  txs.push(
+    prisma.verification.upsert({
+      where: { hash },
+      create: prisma_obj,
+      update: { ...prisma_obj, hash: undefined },
+    })
+  );
 
   return txs;
 }

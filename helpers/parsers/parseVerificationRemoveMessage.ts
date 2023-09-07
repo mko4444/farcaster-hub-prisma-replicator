@@ -15,11 +15,11 @@ export function parseVerificationRemoveMessage(
     hash,
     deleted_at: timestamp,
     address: bytesToHexString(body?.address).value,
-    author: { connect: { fid: fid! } },
+    author: { connect: { fid } },
   };
 
-  txs.push(prisma.user.upsert({ where: { fid: fid! }, create: { fid: fid! }, update: {} }));
-  txs.push(prisma.verification.update({ where: { hash: hash! }, data: prisma_obj }));
+  txs.push(prisma.user.upsert({ where: { fid }, create: { fid }, update: {} }));
+  txs.push(prisma.verification.update({ where: { hash }, data: prisma_obj }));
 
   return txs;
 }

@@ -4,22 +4,22 @@ import prisma from "../../prisma/client";
 export function parseLinkRemoveMessage({ type, targetFid }: LinkBody, hash: string, fid: number, timestamp: Date) {
   const txs: any[] = [];
 
-  const fids_to_save = [fid, targetFid];
-
   const prisma_obj = {
     hash,
     timestamp,
     deleted_at: timestamp,
     type,
-    author: { connect: { fid: fid! } },
-    target_user: targetFid ? { connect: { fid: targetFid! } } : undefined,
+    author: { connect: { fid } },
+    target_user: { connect: { fid: targetFid } },
   };
 
-  txs.push(
-    ...fids_to_save.map((fid) => prisma.user.upsert({ where: { fid: fid! }, create: { fid: fid! }, update: {} }))
-  );
+  txs.push(prisma.user.upsert({ where: { fid }, create: { fid }, update: {} }));
 
-  txs.push(prisma.link.upsert({ where: { hash: hash! }, create: prisma_obj, update: prisma_obj }));
+  if (targetFid) {
+    txs.push(prisma.user.upsert({ where: { fid: targetFid }, create: { fid: targetFid }, update: {} }));
+  }
+
+  txs.push(prisma.link.upsert({ where: { hash }, create: prisma_obj, update: { ...prisma_obj, hash: undefined } }));
 
   return txs;
 }

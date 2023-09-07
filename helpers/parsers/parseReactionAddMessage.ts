@@ -18,24 +18,25 @@ export function parseReactionAddMessage(body: ReactionBody, hash: string, fid: n
     author: { connect: { fid } },
   };
 
-  const fids_to_save = [fid, target_fid].filter((f) => !!f);
-  const casts_to_save = [target_hash].filter((f) => !!f);
+  txs.push(prisma.user.upsert({ where: { fid }, create: { fid }, update: {} }));
 
-  txs.push(...fids_to_save.map((fid) => prisma.user.upsert({ where: { fid }, create: { fid }, update: {} })));
+  if (typeof target_fid === "number") {
+    txs.push(prisma.user.upsert({ where: { fid: target_fid }, create: { fid: target_fid }, update: {} }));
+  }
 
-  txs.push(
-    ...casts_to_save.map((hash) =>
+  if (target_hash) {
+    txs.push(
       prisma.cast.upsert({
-        where: { hash },
-        create: { hash, author: { connect: { fid } } },
-        update: { hash, author: { connect: { fid } } },
+        where: { hash: target_hash },
+        create: { hash: target_hash, author: { connect: { fid: target_fid } } },
+        update: {},
       })
-    )
-  );
+    );
+  }
 
   txs.push(
     prisma.reaction.upsert({
-      where: { hash: prisma_obj.hash },
+      where: { hash },
       create: prisma_obj,
       update: { ...prisma_obj, hash: undefined },
     })

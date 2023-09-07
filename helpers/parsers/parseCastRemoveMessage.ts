@@ -18,7 +18,7 @@ export function parseCastRemoveMessage({ targetHash }: CastRemoveBody, _: string
     prisma.cast.upsert({
       where: { hash: prisma_obj.hash },
       create: prisma_obj,
-      update: prisma_obj,
+      update: { ...prisma_obj, hash: undefined },
     })
   );
 
