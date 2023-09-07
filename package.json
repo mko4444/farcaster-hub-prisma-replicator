@@ -17,6 +17,7 @@
     "bufferutil": "^4.0.7",
     "dayjs": "^1.11.9",
     "fastq": "^1.15.0",
+    "node-gyp": "^9.4.0",
     "pino": "^8.15.0",
     "pino-pretty": "^10.2.0",
     "pretty-ms": "^8.0.0",
