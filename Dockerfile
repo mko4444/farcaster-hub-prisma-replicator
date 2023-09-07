@@ -19,7 +19,7 @@ RUN npm run setup
 
 # Set up your environment variables
 # (assuming you've got a .env file in your project directory)
-COPY .env .env
+COPY .env* ./
 
 # Run your script
 CMD [ "npm", "run", "start" ]
