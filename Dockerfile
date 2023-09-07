@@ -14,12 +14,12 @@ RUN npm install
 # Copy the local files to the container's workspace
 COPY . .
 
-# Set up your environment variables
-# (assuming you've got a .env file in your project directory)
-COPY .env* ./
+# Copy your setup script
+COPY setup.sh ./
 
-# Run the Prisma setup script to migrate tables
-RUN npm run setup
+# Make the setup script executable and run it
+RUN chmod +x ./setup.sh
+RUN ./setup.sh
 
 # Run your script
 CMD [ "npm", "run", "start" ]
