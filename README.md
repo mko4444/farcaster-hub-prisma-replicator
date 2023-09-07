@@ -7,9 +7,9 @@ This hub replicator is different from the WC team's in two ways:
 ## Instructions
 
 1. Clone the repo onto your machine.
-2. Either create a Supabase instance or a local postgres instance. If you have postgres installed, you can run the following commands to do that:
-`psql postgres`
-`CREATE DATABASE fc-postgres;
+2. Either create a Supabase instance or a local postgres instance (you'll need to install postgres locally if you haven't already). Then, run the following two commands:
+   - `psql postgres`
+   - `CREATE DATABASE fc-postgres;
 CREATE USER myuser WITH ENCRYPTED PASSWORD 'mypassword';
 GRANT ALL PRIVILEGES ON DATABASE mydatabase TO myuser;
 \q`
