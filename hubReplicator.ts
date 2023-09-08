@@ -27,6 +27,7 @@ import { parseUserDataAddMessage } from "./helpers/parsers/parseUserDataAddMessa
 
 import { MAX_PAGE_SIZE, MAX_JOB_CONCURRENCY, MAX_BATCH_SIZE, BATCH_INTERVAL } from "./constants";
 import prisma from "./prisma/client";
+import { PrismaPromise } from "@prisma/client";
 
 export class PrismaHubReplicator {
   private client: HubRpcClient;
@@ -132,11 +133,9 @@ export class PrismaHubReplicator {
 
     const queue: queueAsPromised<{ fid: number }> = fastq.promise(async ({ fid }) => {
       if (backfilled.find((u) => u.fid === fid)) {
-        console.info(`[Backfill] Skipping FID ${fid} because it has already been backfilled`);
-        return;
+        return this.log.info(`[Backfill] Skipping FID ${fid} because it has already been backfilled`);
       }
       await this.processAllMessagesForFid(fid);
-
       await prisma.user.update({ where: { fid }, data: { has_backfilled: true } });
 
       totalProcessed += 1;
@@ -257,11 +256,10 @@ export class PrismaHubReplicator {
       result = await this.client.getUserDataByFid({ pageSize, pageToken, fid });
     }
   }
-
   private async onMergeMessages(messages: any[]) {
-    let tx_queue: any = [];
+    let txs: PrismaPromise<any>[] = [];
 
-    for (const message of messages) {
+    for await (const message of messages) {
       // @ts-ignore
       let timestamp: Date = dayjs(fromFarcasterTime(message.data?.timestamp).value).format();
       let hash = bytesToHexString(message.hash).value;
@@ -286,42 +284,38 @@ export class PrismaHubReplicator {
         case 0:
           break;
         case 1: // cast add
-          tx_queue.push(...parseCastAddMessage(...parseProps));
+          txs.push(prisma.cast.upsert(parseCastAddMessage(...parseProps)));
           break;
         case 2: // cast remove
-          tx_queue.push(...parseCastRemoveMessage(...parseProps));
+          txs.push(prisma.cast.upsert(parseCastRemoveMessage(...parseProps)));
           break;
         case 3: // reaction add
-          tx_queue.push(...parseReactionAddMessage(...parseProps));
+          txs.push(prisma.reaction.upsert(parseReactionAddMessage(...parseProps)));
           break;
         case 4: // reaction remove
-          tx_queue.push(...parseReactionRemoveMessage(...parseProps));
+          txs.push(prisma.reaction.upsert(parseReactionRemoveMessage(...parseProps)));
           break;
         case 5: // link add
-          tx_queue.push(...parseLinkAddMessage(...parseProps));
+          txs.push(prisma.link.upsert(parseLinkAddMessage(...parseProps)));
           break;
         case 6: // link remove
-          tx_queue.push(...parseLinkRemoveMessage(...parseProps));
+          txs.push(prisma.link.upsert(parseLinkRemoveMessage(...parseProps)));
           break;
         case 7: // verification add
-          tx_queue.push(...parseVerificationAddMessage(...parseProps));
+          txs.push(prisma.verification.upsert(parseVerificationAddMessage(...parseProps)));
           break;
         case 8: // verification remove
-          tx_queue.push(...parseVerificationRemoveMessage(...parseProps));
+          txs.push(prisma.verification.update(parseVerificationRemoveMessage(...parseProps)));
           break;
         case 11: // user data add
-          tx_queue.push(...parseUserDataAddMessage(...parseProps));
-          tx_queue.push(parseUserDataMessage(...parseProps));
+          txs.push(prisma.userDataMessage.upsert(parseUserDataAddMessage(...parseProps)));
+          txs.push(prisma.user.upsert(parseUserDataMessage(...parseProps)));
           break;
       }
     }
 
-    if (!tx_queue.length) return;
-
-    try {
-      await prisma.$transaction(tx_queue);
-    } catch (error) {
-      throw error;
+    for (let tx of txs) {
+      await tx;
     }
   }
 }

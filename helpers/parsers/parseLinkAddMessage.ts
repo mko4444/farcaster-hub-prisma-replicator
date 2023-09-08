@@ -1,24 +1,20 @@
 import { LinkBody } from "@farcaster/hub-nodejs";
-import prisma from "../../prisma/client";
+import { connectUser } from "../constructs";
 
 export function parseLinkAddMessage({ type, targetFid }: LinkBody, hash: string, fid: number, timestamp: Date) {
-  const txs: any[] = [];
+  if (!type || !targetFid) throw new Error("Invalid link add message");
 
   const prisma_obj = {
     hash,
     timestamp,
     type,
-    author: { connect: { fid } },
-    target_user: { connect: { fid: targetFid } },
+    author: connectUser(fid),
+    target_user: connectUser(targetFid),
   };
 
-  txs.push(prisma.user.upsert({ where: { fid }, create: { fid }, update: {} }));
-
-  if (targetFid) {
-    txs.push(prisma.user.upsert({ where: { fid: targetFid }, create: { fid: targetFid }, update: {} }));
-  }
-
-  txs.push(prisma.link.upsert({ where: { hash }, create: prisma_obj, update: { ...prisma_obj, hash: undefined } }));
-
-  return txs;
+  return {
+    where: { hash },
+    create: prisma_obj,
+    update: { ...prisma_obj, hash: undefined },
+  };
 }

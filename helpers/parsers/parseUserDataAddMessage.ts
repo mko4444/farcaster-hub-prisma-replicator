@@ -1,21 +1,18 @@
 import { UserDataBody } from "@farcaster/hub-nodejs";
-import prisma from "../../prisma/client";
+import { connectUser } from "../constructs";
 
 export function parseUserDataAddMessage({ type, value }: UserDataBody, hash: string, fid: number, timestamp: Date) {
-  const txs: any[] = [];
-
   const prisma_obj = {
     hash,
     timestamp,
     type,
     value,
-    author: { connect: { fid } },
+    author: connectUser(fid),
   };
 
-  txs.push(prisma.user.upsert({ where: { fid }, create: { fid }, update: {} }));
-  txs.push(
-    prisma.userDataMessage.upsert({ where: { hash }, create: prisma_obj, update: { ...prisma_obj, hash: undefined } })
-  );
-
-  return txs;
+  return {
+    where: { hash },
+    create: prisma_obj,
+    update: { ...prisma_obj, hash: undefined },
+  };
 }

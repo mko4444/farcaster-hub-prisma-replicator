@@ -52,8 +52,7 @@ export function constructMentions(fids: number[]) {
     })),
   };
 }
-export function constructConnectUser(fid: number) {
-  if (!fid) return undefined;
+export function connectUser(fid: number) {
   return {
     connectOrCreate: {
       where: { fid },
@@ -61,7 +60,17 @@ export function constructConnectUser(fid: number) {
     },
   };
 }
-export function constructCast(cast?: { hash: Uint8Array; fid: number }) {
+export function connectUsers(fids: number[]) {
+  if (!fids?.[0]) return undefined;
+
+  return {
+    connectOrCreate: fids.map((fid) => ({
+      where: { fid },
+      create: { fid },
+    })),
+  };
+}
+export function connectCast(cast?: { hash: Uint8Array; fid: number }) {
   const hash = cast?.hash ? bytesToHexString(cast?.hash).value : undefined;
   const fid = cast?.fid;
 
@@ -80,6 +89,24 @@ export function constructCast(cast?: { hash: Uint8Array; fid: number }) {
         },
       },
     },
+  };
+}
+export function connectCasts(casts?: { hash: Uint8Array; fid: number }[]) {
+  if (!casts?.[0]) return undefined;
+
+  return {
+    connectOrCreate: casts.map(({ hash, fid }) => ({
+      where: { hash: bytesToHexString(hash).value },
+      create: {
+        hash: bytesToHexString(hash).value,
+        author: {
+          connectOrCreate: {
+            where: { fid },
+            create: { fid },
+          },
+        },
+      },
+    })),
   };
 }
 export function constructReactionType(type: number): ReactionType {
