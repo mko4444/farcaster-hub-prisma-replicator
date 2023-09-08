@@ -25,7 +25,7 @@ import { parseVerificationRemoveMessage } from "./helpers/parsers/parseVerificat
 import { parseVerificationAddMessage } from "./helpers/parsers/parseVerificationAddMessage";
 import { parseUserDataAddMessage } from "./helpers/parsers/parseUserDataAddMessage";
 
-import { MAX_PAGE_SIZE, MAX_JOB_CONCURRENCY } from "./constants";
+import { MAX_PAGE_SIZE, MAX_JOB_CONCURRENCY, MAX_BATCH_SIZE, BATCH_INTERVAL } from "./constants";
 import prisma from "./prisma/client";
 
 export class PrismaHubReplicator {
@@ -36,8 +36,6 @@ export class PrismaHubReplicator {
     this.client = this.ssl ? getSSLHubRpcClient(hub_address) : getInsecureHubRpcClient(hub_address);
     this.subscriber = new HubSubscriber(this.client, log);
 
-    const MAX_BATCH_SIZE = 3; // Set your desired batch size
-    const BATCH_INTERVAL = 1000; // Set your desired batch interval in milliseconds
     let batchBuffer: any[] = [];
     let batchTimer: any = null;
 
