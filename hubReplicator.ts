@@ -315,7 +315,11 @@ export class PrismaHubReplicator {
     }
 
     for (let tx of txs) {
-      await tx;
+      try {
+        await tx;
+      } catch (e) {
+        throw new Error(`[Critical] Transaction failed with error ${e}`);
+      }
     }
   }
 }
