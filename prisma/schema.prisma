@@ -27,6 +27,7 @@ model Cast {
   text               String?
   fid                Int
   mentions_positions Int[]
+  mention_fids       Int[]
   embedded_urls      String[]
   embedded_casts     Cast[]     @relation("CastEmbeds")
   embedded_in        Cast[]     @relation("CastEmbeds")

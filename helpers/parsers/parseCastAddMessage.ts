@@ -1,5 +1,5 @@
-import { CastAddBody, Embed } from "@farcaster/hub-nodejs";
 import { connectCast, connectCasts, connectUser, connectUsers } from "../constructs";
+import { CastAddBody } from "@farcaster/hub-nodejs";
 
 export function parseCastAddMessage(body: CastAddBody, hash: string, fid: number, timestamp: Date) {
   const prisma_obj = {
@@ -12,6 +12,7 @@ export function parseCastAddMessage(body: CastAddBody, hash: string, fid: number
     parent: connectCast(body.parentCastId),
     embedded_casts: connectCasts(body.embeds.map(({ castId }) => castId) as any[]),
     mentions: connectUsers(body.mentions),
+    mention_fids: body.mentions,
     author: connectUser(fid),
   };
 
