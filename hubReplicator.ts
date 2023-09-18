@@ -122,7 +122,7 @@ export class PrismaHubReplicator {
       where: { url: this.hub_address },
     });
 
-    // this.subscriber.start(Number(subscription?.last_event_id));
+    this.subscriber.start(Number(subscription?.last_event_id));
 
     await this.backfill();
   }
