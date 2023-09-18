@@ -10,7 +10,6 @@ const BATCH_SIZE = 5; // Adjust based on your testing
  * Indexes all farcaster locations - ideally every 10 mins
  */
 export async function indexLocations() {
-  console.log("Updating locations");
   const config = {
     select: {
       location_updates: {
@@ -73,7 +72,6 @@ export async function indexLocations() {
   }
 
   try {
-    console.log(`[Locations] Updating ${users.length} users in DB`);
     for (let i = 0; i < users.length; i += BATCH_SIZE) {
       const batch = users.slice(i, i + BATCH_SIZE);
       await prisma.$transaction(
@@ -90,6 +88,11 @@ export async function indexLocations() {
       );
     }
     let end_time: number = dayjs().valueOf();
+
+    if (users?.length > 0) {
+      console.log(`[Locations] Updated ${users.length} users in ${(end_time - start_time) / 1000 / 60}m`);
+    }
+
     return {
       status: "ok",
       message: `[Locations] Updated ${users.length} users in ${(end_time - start_time) / 1000 / 60}m`,
