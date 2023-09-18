@@ -1,11 +1,10 @@
-import { connectCast, connectCasts, connectUser, connectUsers } from "../constructs";
+import { connectCast, connectCasts, connectChannel, connectUser, connectUsers } from "../constructs";
 import { CastAddBody } from "@farcaster/hub-nodejs";
 
 export function parseCastAddMessage(body: CastAddBody, hash: string, fid: number, timestamp: Date) {
   const prisma_obj = {
     hash,
     timestamp,
-    parent_url: body.parentUrl,
     text: body.text,
     mentions_positions: body.mentionsPositions,
     embedded_urls: body.embeds.map((embed) => embed.url).filter((f) => !!f) as string[],
@@ -14,11 +13,12 @@ export function parseCastAddMessage(body: CastAddBody, hash: string, fid: number
     mentions: connectUsers(body.mentions),
     mention_fids: body.mentions,
     author: connectUser(fid),
+    channel: connectChannel(body.parentUrl),
   };
 
   return {
     where: { hash },
     create: prisma_obj,
-    update: { ...prisma_obj, hash: undefined },
+    update: prisma_obj,
   };
 }

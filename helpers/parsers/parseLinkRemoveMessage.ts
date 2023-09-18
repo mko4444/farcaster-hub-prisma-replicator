@@ -16,6 +16,6 @@ export function parseLinkRemoveMessage({ type, targetFid }: LinkBody, hash: stri
   return {
     where: { hash },
     create: prisma_obj,
-    update: { ...prisma_obj, hash: undefined },
+    update: prisma_obj,
   };
 }

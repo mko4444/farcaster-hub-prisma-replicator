@@ -13,6 +13,6 @@ export function parseCastRemoveMessage({ targetHash }: CastRemoveBody, _: string
   return {
     where: { hash: prisma_obj.hash },
     create: prisma_obj,
-    update: { ...prisma_obj, hash: undefined },
+    update: prisma_obj,
   };
 }

@@ -33,9 +33,43 @@ model Cast {
   embedded_in        Cast[]     @relation("CastEmbeds")
   parent             Cast?      @relation("CastReplies", fields: [parent_hash], references: [hash], onUpdate: NoAction, onDelete: NoAction)
   author             User       @relation(name: "CastAuthor", fields: [fid], references: [fid], onUpdate: NoAction, onDelete: NoAction)
+  channel            Channel?   @relation(fields: [parent_url], references: [parent_url], onUpdate: NoAction, onDelete: NoAction)
   mentions           User[]     @relation("CastMentionedBy")
-  reactions          Reaction[] @relation("CastLikedBy")
+  reactions          Reaction[] @relation("ReactionCast")
+  likes              Like[]     @relation("LikeCast")
   replies            Cast[]     @relation("CastReplies")
+  recasts            Recast[]   @relation("RecastCast")
+}
+
+model Channel {
+  parent_url String     @id @unique
+  created_at DateTime   @default(now())
+  updated_at DateTime   @default(now())
+  casts      Cast[]
+  reactions  Reaction[]
+  likes      Like[]
+  recasts    Recast[]
+}
+
+model Group {
+  fid        Int        @id @unique
+  created_at DateTime   @default(now())
+  updated_at DateTime   @default(now())
+  fc_profile User       @relation(name: "GroupProfile", fields: [fid], references: [fid], onUpdate: NoAction, onDelete: NoAction)
+  contracts  Contract[]
+}
+
+model Contract {
+  id         String         @id @unique @default(uuid())
+  address    String
+  chain      String
+  group_fid  Int
+  created_at DateTime       @default(now())
+  updated_at DateTime       @default(now())
+  owners     Verification[] @relation("GroupMembers")
+  groups     Group[]
+
+  @@unique([address, chain])
 }
 
 model Reaction {
@@ -49,41 +83,95 @@ model Reaction {
   target_hash String?
   target_url  String?
   author      User         @relation(name: "ReactionAuthor", fields: [fid], references: [fid], onUpdate: NoAction, onDelete: NoAction)
-  cast        Cast?        @relation(name: "CastLikedBy", fields: [target_hash], references: [hash], onUpdate: NoAction, onDelete: NoAction)
+  cast        Cast?        @relation(name: "ReactionCast", fields: [target_hash], references: [hash], onUpdate: NoAction, onDelete: NoAction)
+  channel     Channel?     @relation(fields: [target_url], references: [parent_url], onUpdate: NoAction, onDelete: NoAction)
+}
+
+model Like {
+  hash        String    @id @unique
+  created_at  DateTime  @default(now())
+  updated_at  DateTime  @default(now())
+  deleted_at  DateTime?
+  timestamp   DateTime
+  fid         Int
+  target_hash String?
+  target_url  String?
+  author      User      @relation(name: "LikeAuthor", fields: [fid], references: [fid], onUpdate: NoAction, onDelete: NoAction)
+  cast        Cast?     @relation(name: "LikeCast", fields: [target_hash], references: [hash], onUpdate: NoAction, onDelete: NoAction)
+  channel     Channel?  @relation(fields: [target_url], references: [parent_url], onUpdate: NoAction, onDelete: NoAction)
+}
+
+model Recast {
+  hash        String    @id @unique
+  created_at  DateTime  @default(now())
+  updated_at  DateTime  @default(now())
+  deleted_at  DateTime?
+  timestamp   DateTime
+  fid         Int
+  target_hash String?
+  target_url  String?
+  author      User      @relation(name: "RecastAuthor", fields: [fid], references: [fid], onUpdate: NoAction, onDelete: NoAction)
+  cast        Cast?     @relation(name: "RecastCast", fields: [target_hash], references: [hash], onUpdate: NoAction, onDelete: NoAction)
+  channel     Channel?  @relation(fields: [target_url], references: [parent_url], onUpdate: NoAction, onDelete: NoAction)
 }
 
 model User {
-  fid             Int               @id @unique
-  created_at      DateTime          @default(now())
-  updated_at      DateTime          @default(now())
-  deleted_at      DateTime?
-  fname           String?
-  pfp_url         String?
-  bio             String?
-  display_name    String?
-  custody_address String?
-  url             String?
-  has_backfilled  Boolean           @default(false)
-  casts           Cast[]            @relation("CastAuthor")
-  mentioned_in    Cast[]            @relation("CastMentionedBy")
-  reactions       Reaction[]        @relation("ReactionAuthor")
-  verifications   Verification[]
-  links           Link[]            @relation("LinkAuthor")
-  link_targets    Link[]            @relation("LinkTarget")
-  profileUpdates  UserDataMessage[]
+  fid              Int               @id @unique
+  created_at       DateTime          @default(now())
+  updated_at       DateTime          @default(now())
+  deleted_at       DateTime?
+  fname            String?
+  pfp_url          String?
+  bio              String?
+  display_name     String?
+  custody_address  String?
+  url              String?
+  last_location_id String?
+  has_backfilled   Boolean           @default(false)
+  casts            Cast[]            @relation("CastAuthor")
+  mentioned_in     Cast[]            @relation("CastMentionedBy")
+  reactions        Reaction[]        @relation("ReactionAuthor")
+  likes            Like[]            @relation("LikeAuthor")
+  recasts          Recast[]          @relation("RecastAuthor")
+  location         Location?         @relation(fields: [last_location_id], references: [place_id])
+  verifications    Verification[]
+  links            Link[]            @relation("LinkAuthor")
+  link_targets     Link[]            @relation("LinkTarget")
+  profile_updates  UserDataMessage[]
+  associated_group Group?            @relation(name: "GroupProfile")
+  location_updates LocationUpdate[]
+}
+
+model Location {
+  place_id    String           @id @unique
+  description String?
+  users       User[]
+  updates     LocationUpdate[]
+}
+
+model LocationUpdate {
+  id        String   @id @unique @default(uuid())
+  place_id  String
+  timestamp DateTime @default(now())
+  fid       Int
+  location  Location @relation(fields: [place_id], references: [place_id], onUpdate: NoAction, onDelete: NoAction)
+  author    User     @relation(fields: [fid], references: [fid], onUpdate: NoAction, onDelete: NoAction)
+
+  @@unique([place_id, fid, timestamp])
 }
 
 model Verification {
-  hash          String    @id @unique
-  created_at    DateTime  @default(now())
-  updated_at    DateTime  @default(now())
+  hash          String     @id @unique
+  created_at    DateTime   @default(now())
+  updated_at    DateTime   @default(now())
   deleted_at    DateTime?
   timestamp     DateTime
   fid           Int
   address       String
   eth_signature String
   block_hash    String
-  author        User      @relation(fields: [fid], references: [fid], onUpdate: NoAction, onDelete: NoAction)
+  author        User       @relation(fields: [fid], references: [fid], onUpdate: NoAction, onDelete: NoAction)
+  groups        Contract[] @relation("GroupMembers")
 }
 
 model Link {

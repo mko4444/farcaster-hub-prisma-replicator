@@ -1,6 +1,8 @@
+import { indexLocations } from "@/apiClient/indexLocations";
 import { PrismaHubReplicator } from "./hubReplicator";
-import { HUB_HOST, HUB_SSL } from "./constants";
+import cron from "node-cron";
 import { log } from "./log";
+import { HUB_HOST, HUB_SSL } from "./constants";
 
 let replicator: PrismaHubReplicator | undefined;
 
@@ -26,6 +28,10 @@ for (const signal of ["SIGTERM", "SIGINT"]) {
     shutdown();
   });
 }
+
+cron.schedule("*/10 * * * *", async () => {
+  await indexLocations();
+});
 
 (async () => {
   replicator = new PrismaHubReplicator(HUB_HOST, HUB_SSL, log);

@@ -114,3 +114,14 @@ export function constructReactionType(type: number): ReactionType {
   if (type === 2) return "REACTION_TYPE_RECAST";
   return "REACTION_TYPE_NONE";
 }
+
+export function connectChannel(parent_url?: string) {
+  if (!parent_url) return undefined;
+
+  return {
+    connectOrCreate: {
+      where: { parent_url },
+      create: { parent_url },
+    },
+  };
+}

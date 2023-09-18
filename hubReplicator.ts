@@ -25,9 +25,13 @@ import { parseVerificationRemoveMessage } from "./helpers/parsers/parseVerificat
 import { parseVerificationAddMessage } from "./helpers/parsers/parseVerificationAddMessage";
 import { parseUserDataAddMessage } from "./helpers/parsers/parseUserDataAddMessage";
 
-import { MAX_PAGE_SIZE, MAX_JOB_CONCURRENCY, MAX_BATCH_SIZE, BATCH_INTERVAL } from "./constants";
-import prisma from "./prisma/client";
-import { PrismaPromise } from "@prisma/client";
+import { MAX_PAGE_SIZE, MAX_JOB_CONCURRENCY, MAX_BATCH_SIZE, BATCH_INTERVAL, reaction_types } from "./constants";
+import prisma from "@/lib/prisma";
+import { Prisma, PrismaPromise } from "@prisma/client";
+import { parseLikeAddMessage } from "./helpers/parsers/parseLikeAddMessage";
+import { parseRecastAddMessage } from "./helpers/parsers/parseRecastAddMessage";
+import { parseLikeRemoveMessage } from "./helpers/parsers/parseLikeRemoveMessage";
+import { parseRecastRemoveMessage } from "./helpers/parsers/parseRecastRemoveMessage";
 
 export class PrismaHubReplicator {
   private client: HubRpcClient;
@@ -118,7 +122,7 @@ export class PrismaHubReplicator {
       where: { url: this.hub_address },
     });
 
-    this.subscriber.start(Number(subscription?.last_event_id));
+    // this.subscriber.start(Number(subscription?.last_event_id));
 
     await this.backfill();
   }
@@ -291,9 +295,19 @@ export class PrismaHubReplicator {
           break;
         case 3: // reaction add
           txs.push(prisma.reaction.upsert(parseReactionAddMessage(...parseProps)));
+          if (reaction_types[body.type] === "REACTION_TYPE_LIKE") {
+            txs.push(prisma.like.upsert(parseLikeAddMessage(...parseProps)));
+          } else if (reaction_types[body.type] === "REACTION_TYPE_RECAST") {
+            txs.push(prisma.recast.upsert(parseRecastAddMessage(...parseProps)));
+          }
           break;
         case 4: // reaction remove
           txs.push(prisma.reaction.upsert(parseReactionRemoveMessage(...parseProps)));
+          if (reaction_types[body.type] === "REACTION_TYPE_LIKE") {
+            txs.push(prisma.like.upsert(parseLikeRemoveMessage(...parseProps)));
+          } else if (reaction_types[body.type] === "REACTION_TYPE_RECAST") {
+            txs.push(prisma.recast.upsert(parseRecastRemoveMessage(...parseProps)));
+          }
           break;
         case 5: // link add
           txs.push(prisma.link.upsert(parseLinkAddMessage(...parseProps)));
@@ -314,10 +328,11 @@ export class PrismaHubReplicator {
       }
     }
 
-    for (let tx of txs) {
+    for await (const tx of txs) {
       try {
         await tx;
       } catch (e) {
+        console.error(e);
         throw new Error(`[Critical] Transaction failed with error ${e}`);
       }
     }

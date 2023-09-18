@@ -1,13 +1,10 @@
 import { connectCast, connectChannel, connectUser } from "../constructs";
 import { ReactionBody } from "@farcaster/hub-nodejs";
-import { reaction_types } from "../../constants";
 
-export function parseReactionRemoveMessage(body: ReactionBody, hash: string, fid: number, timestamp: Date) {
+export function parseRecastAddMessage(body: ReactionBody, hash: string, fid: number, timestamp: Date) {
   const prisma_obj = {
     hash,
     timestamp,
-    deleted_at: timestamp,
-    type: reaction_types[body.type],
     cast: connectCast(body.targetCastId),
     author: connectUser(fid),
     channel: connectChannel(body.targetUrl),

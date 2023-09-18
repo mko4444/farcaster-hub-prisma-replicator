@@ -13,6 +13,6 @@ export function parseUserDataAddMessage({ type, value }: UserDataBody, hash: str
   return {
     where: { hash },
     create: prisma_obj,
-    update: { ...prisma_obj, hash: undefined },
+    update: prisma_obj,
   };
 }

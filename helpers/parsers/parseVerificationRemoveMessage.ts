@@ -18,6 +18,6 @@ export function parseVerificationRemoveMessage(
 
   return {
     where: { hash },
-    data: { ...prisma_obj, hash: undefined },
+    data: prisma_obj,
   };
 }
