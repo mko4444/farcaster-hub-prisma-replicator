@@ -103,29 +103,38 @@ export class PrismaHubReplicator {
     this.subscriber.destroy();
   }
 
-  public async start() {
-    const infoResult = await this.client.getInfo({ dbStats: true });
+  public async start(retryCount: number = 0) {
+    try {
+      const infoResult = await this.client.getInfo({ dbStats: true });
 
-    if (infoResult.isErr() || infoResult.value.dbStats === undefined) {
-      throw new Error(`Unable to get information about hub ${this.hub_address}`);
+      if (infoResult.isErr() || infoResult.value.dbStats === undefined) {
+        throw new Error(`Unable to get information about hub ${this.hub_address}`);
+      }
+
+      const { numMessages } = infoResult.value.dbStats;
+
+      console.info(`[Backfill] Fetching messages from hub ${this.hub_address} (~${numMessages} messages)`);
+
+      const subscription = await prisma.hubSubscription.findUnique({
+        where: { url: this.hub_address },
+      });
+
+      this.subscriber.start(Number(subscription?.last_event_id));
+
+      await this.backfill();
+    } catch (error) {
+      console.error(`Error starting: ${error.message}`);
+      if (retryCount < 5) {
+        // Adjust the maximum retry count as needed
+        console.info(`Attempting to restart (attempt ${retryCount + 1})`);
+        await new Promise((res) => setTimeout(res, 5000)); // Wait for 5 seconds before retrying
+        await this.start(retryCount + 1);
+      } else {
+        console.error("Max retry attempts reached. Could not start.");
+      }
     }
-
-    const { numMessages } = infoResult.value.dbStats;
-
-    // Not technically true, since hubs don't return CastRemove/etc. messages,
-    // but at least gives a rough ballpark of order of magnitude.
-    console.info(`[Backfill] Fetching messages from hub ${this.hub_address} (~${numMessages} messages)`);
-
-    // Process live events going forward, starting from the last event we
-    // processed (if there was one).
-    const subscription = await prisma.hubSubscription.findUnique({
-      where: { url: this.hub_address },
-    });
-
-    this.subscriber.start(Number(subscription?.last_event_id));
-
-    await this.backfill();
   }
+
   private async backfill() {
     const maxFidResult = await this.client.getFids({ pageSize: 1, reverse: true });
     const backfilled = await prisma.user.findMany({ where: { has_backfilled: true }, select: { fid: true } });
