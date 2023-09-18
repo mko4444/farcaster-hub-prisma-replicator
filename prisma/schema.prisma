@@ -51,6 +51,12 @@ model Channel {
   recasts    Recast[]
 }
 
+model Webhook {
+  webhook_id     String   @id
+  created_at     DateTime @default(now())
+  webhook_secret String
+}
+
 model Group {
   fid        Int        @id @unique
   created_at DateTime   @default(now())
@@ -63,7 +69,6 @@ model Contract {
   id         String         @id @unique @default(uuid())
   address    String
   chain      String
-  group_fid  Int
   created_at DateTime       @default(now())
   updated_at DateTime       @default(now())
   owners     Verification[] @relation("GroupMembers")

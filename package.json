@@ -9,7 +9,7 @@
     "setup": "npx prisma migrate dev --name init --preview-feature",
     "reset": "npx prisma migrate reset --preview-feature",
     "dev": "next dev",
-    "build": "next build"
+    "build": "prisma generate && next build"
   },
   "author": "",
   "license": "ISC",
