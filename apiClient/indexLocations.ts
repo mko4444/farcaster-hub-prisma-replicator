@@ -73,7 +73,7 @@ export async function indexLocations() {
   }
 
   try {
-    console.log(`[Locations Indexer] Updating ${users.length} users in DB`);
+    console.log(`[Locations] Updating ${users.length} users in DB`);
     for (let i = 0; i < users.length; i += BATCH_SIZE) {
       const batch = users.slice(i, i + BATCH_SIZE);
       await prisma.$transaction(
@@ -92,7 +92,7 @@ export async function indexLocations() {
     let end_time: number = dayjs().valueOf();
     return {
       status: "ok",
-      message: `[Locations Indexer] Updated ${users.length} users in ${(end_time - start_time) / 1000 / 60}m`,
+      message: `[Locations] Updated ${users.length} users in ${(end_time - start_time) / 1000 / 60}m`,
     };
   } catch (e) {
     console.log(e);
