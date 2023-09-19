@@ -54,6 +54,7 @@ model Channel {
 model Webhook {
   webhook_id     String   @id
   created_at     DateTime @default(now())
+  webhook_url    String
   webhook_secret String
 }
 
@@ -66,12 +67,12 @@ model Group {
 }
 
 model Contract {
-  id         String         @id @unique @default(uuid())
+  id         String    @id @unique @default(uuid())
   address    String
   chain      String
-  created_at DateTime       @default(now())
-  updated_at DateTime       @default(now())
-  owners     Verification[] @relation("GroupMembers")
+  created_at DateTime  @default(now())
+  updated_at DateTime  @default(now())
+  owners     Address[] @relation("GroupMembers")
   groups     Group[]
 
   @@unique([address, chain])
@@ -166,17 +167,23 @@ model LocationUpdate {
 }
 
 model Verification {
-  hash          String     @id @unique
-  created_at    DateTime   @default(now())
-  updated_at    DateTime   @default(now())
+  hash          String    @id @unique
+  created_at    DateTime  @default(now())
+  updated_at    DateTime  @default(now())
   deleted_at    DateTime?
   timestamp     DateTime
   fid           Int
-  address       String
+  address       String    @default("0x000")
   eth_signature String
   block_hash    String
-  author        User       @relation(fields: [fid], references: [fid], onUpdate: NoAction, onDelete: NoAction)
-  groups        Contract[] @relation("GroupMembers")
+  author        User      @relation(fields: [fid], references: [fid], onUpdate: NoAction, onDelete: NoAction)
+  address_info  Address   @relation(fields: [address], references: [address], onUpdate: NoAction, onDelete: NoAction)
+}
+
+model Address {
+  address       String         @id @unique
+  verifications Verification[]
+  contracts     Contract[]     @relation("GroupMembers")
 }
 
 model Link {

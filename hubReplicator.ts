@@ -267,7 +267,7 @@ export class PrismaHubReplicator {
     for await (const message of messages) {
       // @ts-ignore
       let timestamp: Date = dayjs(fromFarcasterTime(message.data?.timestamp).value).format();
-      let hash = bytesToHexString(message.hash).value;
+      let hash = `0x${bytesToHexString(message.hash).value}`;
       let fid = message.data?.fid;
       let body =
         message?.data?.castAddBody ||

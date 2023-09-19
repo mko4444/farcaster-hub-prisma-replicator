@@ -12,8 +12,13 @@ export function parseVerificationRemoveMessage(
     timestamp,
     hash,
     deleted_at: timestamp,
-    address: bytesToHexString(body?.address).value,
     author: connectUser(fid),
+    address_info: {
+      connectOrCreate: {
+        where: { address: `0x${bytesToHexString(body?.address).value}` },
+        create: { address: `0x${bytesToHexString(body?.address).value}` },
+      },
+    },
   };
 
   return {

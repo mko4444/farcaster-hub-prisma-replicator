@@ -11,10 +11,15 @@ export function parseVerificationAddMessage(
   const prisma_obj = {
     timestamp,
     hash,
-    address: bytesToHexString(body?.address).value,
     eth_signature: bytesToHexString(body?.ethSignature).value,
     block_hash: bytesToHexString(body?.blockHash).value,
     author: connectUser(fid) as any,
+    address_info: {
+      connectOrCreate: {
+        where: { address: `0x${bytesToHexString(body?.address).value}` },
+        create: { address: `0x${bytesToHexString(body?.address).value}` },
+      },
+    },
   };
 
   return {
