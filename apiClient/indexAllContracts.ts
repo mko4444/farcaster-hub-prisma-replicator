@@ -7,6 +7,9 @@ import prisma from "@/lib/prisma";
 
 const GET_ENDPOINT = "https://api.simplehash.com/webhook_api/v0/webhook";
 const CREATE_ENDPOINT = "https://api.simplehash.com/webhook_api/v0/webhook";
+const webhook_url = process.env.SIMPLEHASH_WEBHOOK_URL;
+const webhook_secret = process.env.SIMPLEHASH_SECRET;
+const event_types = ["contract.transfer"];
 const options = { headers: { "X-API-KEY": process.env.SIMPLEHASH_KEY } };
 
 export async function indexAllContracts() {
@@ -25,8 +28,8 @@ export async function indexAllContracts() {
         ...options,
         method: "POST",
         body: JSON.stringify({
-          webhook_url: "",
-          event_types: ["contract.transfer"],
+          webhook_url,
+          event_types,
           contract_addresses: contracts.map((c) => `${c.chain}.${c.address}`),
           webhook_secret: process.env.SIMPLEHASH_SECRET,
         }),
@@ -35,11 +38,9 @@ export async function indexAllContracts() {
       // if there's no webhook ID, we throw an error
       if (!simplehash_webhook.webhook_id) throw new Error("No webhook ID returned from SimpleHash");
       // next we save that webhook to our database
+      const { webhook_id } = simplehash_webhook;
       const db_webhook = await prisma.webhook.create({
-        data: {
-          webhook_id: simplehash_webhook.webhook_id,
-          webhook_secret: process.env.SIMPLEHASH_SECRET,
-        },
+        data: { webhook_id, webhook_secret },
       });
       console.log({ db_webhook });
       return db_webhook;
@@ -50,11 +51,6 @@ export async function indexAllContracts() {
   }
 
   return null;
-
-  //   const webhooks = await fetch(endpoint, options).then((r) => r.json());
-  //   // if there are no webhooks, we create one
-  //   if (!webhooks.length) {
-  //   }
 }
 
 // /**
