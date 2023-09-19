@@ -137,10 +137,11 @@ export class PrismaHubReplicator {
     const startTime = Date.now();
 
     const queue: queueAsPromised<{ fid: number }> = fastq.promise(async ({ fid }) => {
-      if (backfilled.find((u) => u.fid === fid)) {
-        return this.log.info(`[Backfill] Skipping FID ${fid} because it has already been backfilled`);
-      }
-      await this.processAllMessagesForFid(fid);
+      if (backfilled.find((u) => u.fid === fid)) return;
+
+      console.info(`[Backfill] Indexing FID ${fid}/${maxFid}.`);
+
+      await this.processAllMessagesForFid(fid, true);
       await prisma.user.update({ where: { fid }, data: { has_backfilled: true } });
 
       totalProcessed += 1;
@@ -157,17 +158,16 @@ export class PrismaHubReplicator {
 
     await queue.drain();
   }
-  private async processAllMessagesForFid(fid: number) {
+  private async processAllMessagesForFid(fid: number, bool) {
     for (const fn of [
       this.getCastsByFidInBatchesOf,
       this.getReactionsByFidInBatchesOf,
       this.getLinksByFidInBatchesOf,
-      this.getSignersByFidInBatchesOf,
       this.getVerificationsByFidInBatchesOf,
       this.getUserDataByFidInBatchesOf,
     ]) {
       for await (const messages of fn.call(this, fid, MAX_PAGE_SIZE)) {
-        await this.onMergeMessages(messages);
+        await this.onMergeMessages(messages, bool);
       }
     }
   }
@@ -216,21 +216,6 @@ export class PrismaHubReplicator {
       result = await this.client.getLinksByFid({ pageSize, pageToken, fid });
     }
   }
-  private async *getSignersByFidInBatchesOf(fid: number, pageSize: number) {
-    let result = await this.client.getSignersByFid({ pageSize, fid });
-    for (;;) {
-      if (result.isErr()) {
-        throw new Error("Unable to backfill");
-      }
-
-      const { messages, nextPageToken: pageToken } = result.value;
-
-      yield messages;
-
-      if (!pageToken?.length) break;
-      result = await this.client.getSignersByFid({ pageSize, pageToken, fid });
-    }
-  }
   private async *getVerificationsByFidInBatchesOf(fid: number, pageSize: number) {
     let result = await this.client.getVerificationsByFid({ pageSize, fid });
     for (;;) {
@@ -261,7 +246,7 @@ export class PrismaHubReplicator {
       result = await this.client.getUserDataByFid({ pageSize, pageToken, fid });
     }
   }
-  private async onMergeMessages(messages: any[]) {
+  private async onMergeMessages(messages: any[], bool) {
     let txs: PrismaPromise<any>[] = [];
 
     for await (const message of messages) {
@@ -329,9 +314,9 @@ export class PrismaHubReplicator {
       }
     }
 
-    for await (const tx of txs) {
+    for (let i = 0; i < txs.length; i += 5) {
       try {
-        await tx;
+        await prisma.$transaction(txs.slice(i, i + 5));
       } catch (e) {
         console.error(e);
         throw new Error(`[Critical] Transaction failed with error ${e}`);
