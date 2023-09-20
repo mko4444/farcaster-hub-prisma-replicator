@@ -25,41 +25,79 @@ export async function indexAllContracts() {
   for await (const { address, chain } of contracts) {
     console.log("indexing contract", address);
     // grab all owners for the contract
-    const all_owners = await indexContract({ address, chain });
-    // save all owners to the database
-    console.log("Found", all_owners.length, "owners for contract", address);
-    try {
-      const contract = await prisma.contract.update({
-        where: { address_chain: { address, chain } },
-        data: {
-          owners: {
-            set: [],
-            connectOrCreate: all_owners.map((address) => ({ where: { address }, create: { address } })),
-          },
-        },
-        include: { _count: { select: { owners: true } } },
-      });
-      console.log("Contract updated:", contract);
-    } catch (e) {
-      console.error(e);
+    let next = "";
+    let all_owners = [];
+    // grab the current owners from the database
+    const current_owners = await prisma.contract.findUnique({ where: { address_chain: { address, chain } } }).owners();
+    // iterate over all owners
+    while (next !== null) {
+      // grab the next page of owners
+      const url = `https://api.simplehash.com/api/v0/nfts/owners/${chain}/${address}?limit=100${
+        next ? `&cursor=${next}` : ""
+      }`;
+      // grab the owners from the APIç
+      const { owners, next_cursor } = await fetch(url, { headers }).then((r) => r.json());
+      // create a lowercase flat list of owner addresses
+      const arr = owners.map(({ owner_address }) => owner_address.toLowerCase());
+      // add the owners to the list of all owners
+      all_owners.push(...arr);
+      // upsert new owners into the database
+      await prisma.$transaction(
+        arr
+          .filter((addr) => !current_owners.map((c) => c.address).includes(addr))
+          .map((owner_address) =>
+            prisma.address.upsert({
+              where: { address: owner_address },
+              create: {
+                address: owner_address,
+                contracts: {
+                  connect: {
+                    address_chain: { address, chain },
+                  },
+                },
+              },
+              update: {
+                contracts: {
+                  connect: {
+                    address_chain: { address, chain },
+                  },
+                },
+              },
+            })
+          )
+      );
+      // set the next cursor
+      next = next_cursor ?? null;
     }
+    // log the number of owners indexed
+    console.log(`Connected ${all_owners.length} owners to contract ${address}.`);
+    // find any owners that are no longer owners
+    const owners_to_delete = await prisma.address.findMany({
+      where: {
+        address: { notIn: all_owners },
+        contracts: { some: { address, chain } },
+      },
+    });
+    // log the number of owners to delete
+    console.log(`Deleting ${owners_to_delete.length} owners from contract ${address}.`);
+    // delete the owners
+    await prisma.$transaction(
+      owners_to_delete.map(({ address }) =>
+        prisma.address.update({
+          where: { address },
+          data: {
+            contracts: {
+              disconnect: {
+                address_chain: { address, chain },
+              },
+            },
+          },
+        })
+      )
+    );
   }
 
   return { status: "ok" };
-}
-
-async function indexContract({ address, chain }: { address: string; chain: string }) {
-  let next = "";
-  let all_owners = [];
-
-  while (next !== null) {
-    const url = `https://api.simplehash.com/api/v0/nfts/owners/${chain}/${address}${next ? `?cursor=${next}` : ""}`;
-    const { owners, next_cursor } = await fetch(url, { headers }).then((r) => r.json());
-    all_owners.push(...owners.map(({ owner_address }) => owner_address.toLowerCase()));
-    next = next_cursor;
-  }
-
-  return all_owners;
 }
 
 async function updateWebhook() {
