@@ -313,9 +313,9 @@ export class PrismaHubReplicator {
       }
     }
 
-    for (let i = 0; i < txs.length; i += 5) {
+    for await (const tx of txs) {
       try {
-        await prisma.$transaction(txs.slice(i, i + 5));
+        await tx;
       } catch (e) {
         console.error(e);
         throw new Error(`[Critical] Transaction failed with error ${e}`);
