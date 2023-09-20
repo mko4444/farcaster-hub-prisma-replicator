@@ -24,15 +24,14 @@ import { parseUserDataMessage } from "./helpers/parsers/parseUserDataMessage";
 import { parseVerificationRemoveMessage } from "./helpers/parsers/parseVerificationRemoveMessage";
 import { parseVerificationAddMessage } from "./helpers/parsers/parseVerificationAddMessage";
 import { parseUserDataAddMessage } from "./helpers/parsers/parseUserDataAddMessage";
-
-import { MAX_PAGE_SIZE, MAX_JOB_CONCURRENCY, MAX_BATCH_SIZE, BATCH_INTERVAL, reaction_types } from "./constants";
-import prisma from "@/lib/prisma";
-import { Prisma, PrismaPromise } from "@prisma/client";
 import { parseLikeAddMessage } from "./helpers/parsers/parseLikeAddMessage";
 import { parseRecastAddMessage } from "./helpers/parsers/parseRecastAddMessage";
 import { parseLikeRemoveMessage } from "./helpers/parsers/parseLikeRemoveMessage";
 import { parseRecastRemoveMessage } from "./helpers/parsers/parseRecastRemoveMessage";
 
+import { MAX_PAGE_SIZE, MAX_JOB_CONCURRENCY, MAX_BATCH_SIZE, BATCH_INTERVAL, reaction_types } from "./constants";
+import prisma from "@/lib/prisma";
+import { PrismaPromise } from "@prisma/client";
 export class PrismaHubReplicator {
   private client: HubRpcClient;
   private subscriber: HubSubscriber;
@@ -141,7 +140,7 @@ export class PrismaHubReplicator {
 
       console.info(`[Backfill] Indexing FID ${fid}/${maxFid}.`);
 
-      await this.processAllMessagesForFid(fid, true);
+      await this.processAllMessagesForFid(fid);
       await prisma.user.update({ where: { fid }, data: { has_backfilled: true } });
 
       totalProcessed += 1;
@@ -158,7 +157,7 @@ export class PrismaHubReplicator {
 
     await queue.drain();
   }
-  private async processAllMessagesForFid(fid: number, bool) {
+  private async processAllMessagesForFid(fid: number) {
     for (const fn of [
       this.getCastsByFidInBatchesOf,
       this.getReactionsByFidInBatchesOf,
@@ -167,7 +166,7 @@ export class PrismaHubReplicator {
       this.getUserDataByFidInBatchesOf,
     ]) {
       for await (const messages of fn.call(this, fid, MAX_PAGE_SIZE)) {
-        await this.onMergeMessages(messages, bool);
+        await this.onMergeMessages(messages);
       }
     }
   }
@@ -246,7 +245,7 @@ export class PrismaHubReplicator {
       result = await this.client.getUserDataByFid({ pageSize, pageToken, fid });
     }
   }
-  private async onMergeMessages(messages: any[], bool) {
+  private async onMergeMessages(messages: any[]) {
     let txs: PrismaPromise<any>[] = [];
 
     for await (const message of messages) {
