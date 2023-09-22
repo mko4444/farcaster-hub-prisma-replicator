@@ -149,10 +149,23 @@ model User {
 }
 
 model Location {
-  place_id    String           @id @unique
-  description String?
-  users       User[]
-  updates     LocationUpdate[]
+  place_id          String           @id @unique
+  description       String?
+  users             User[]
+  updates           LocationUpdate[]
+  latitude          Float?
+  longitude         Float?
+  formatted_address String?
+  name              String?
+  country_short     String?
+  country_long      String?
+  state_short       String?
+  state_long        String?
+  locality_short    String?
+  locality_long     String?
+  utc_offset        Int?
+  vicinity          String?
+  url               String?
 }
 
 model LocationUpdate {

@@ -7,7 +7,7 @@ export function parseCastAddMessage(body: CastAddBody, hash: string, fid: number
     timestamp,
     text: body.text,
     mentions_positions: body.mentionsPositions,
-    embedded_urls: body.embeds.map((embed) => embed.url).filter((f) => !!f) as string[],
+    embedded_urls: body.embeds.map((embed) => embed.url).filter((f) => !!f),
     parent: connectCast(body.parentCastId),
     embedded_casts: connectCasts(body.embeds.map(({ castId }) => castId) as any[]),
     mentions: connectUsers(body.mentions),

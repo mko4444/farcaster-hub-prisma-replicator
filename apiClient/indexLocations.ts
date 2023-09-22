@@ -42,29 +42,50 @@ export async function indexLocations() {
     if (!place_id && !current_place_id) continue;
 
     const obj = {
-      fid,
-      location: place_id
-        ? {
-            connectOrCreate: {
-              where: { place_id },
-              create: { place_id, description },
-            },
-          }
-        : {
-            disconnect: true,
+      where: { fid },
+      create: {
+        fid,
+        location: {
+          connectOrCreate: {
+            where: { place_id },
+            create: { place_id, description },
           },
-      location_updates: save_location_update
-        ? {
-            create: {
-              location: {
-                connectOrCreate: {
-                  where: { place_id },
-                  create: { place_id, description },
-                },
+        },
+        location_updates: {
+          create: {
+            location: {
+              connectOrCreate: {
+                where: { place_id },
+                create: { place_id, description },
               },
             },
-          }
-        : undefined,
+          },
+        },
+      },
+      update: {
+        location: place_id
+          ? {
+              connectOrCreate: {
+                where: { place_id },
+                create: { place_id, description },
+              },
+            }
+          : {
+              disconnect: true,
+            },
+        location_updates: save_location_update
+          ? {
+              create: {
+                location: {
+                  connectOrCreate: {
+                    where: { place_id },
+                    create: { place_id, description },
+                  },
+                },
+              },
+            }
+          : undefined,
+      },
     };
 
     user_count++;
@@ -74,18 +95,9 @@ export async function indexLocations() {
   try {
     for (let i = 0; i < users.length; i += BATCH_SIZE) {
       const batch = users.slice(i, i + BATCH_SIZE);
-      await prisma.$transaction(
-        batch.map(({ fid, ...obj }) =>
-          prisma.user.upsert({
-            where: { fid },
-            create: { fid, ...obj },
-            update: { ...obj },
-          })
-        ),
-        {
-          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-        }
-      );
+      await prisma.$transaction(batch.map(prisma.user.upsert), {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      });
     }
     let end_time: number = dayjs().valueOf();
 

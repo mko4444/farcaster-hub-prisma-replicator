@@ -6,6 +6,7 @@ const nextConfig = {
     SIMPLEHASH_KEY: process.env.SIMPLEHASH_KEY,
     SIMPLEHASH_SECRET: process.env.SIMPLEHASH_SECRET,
     SIMPLEHASH_WEBHOOK_URL: process.env.SIMPLEHASH_WEBHOOK_URL,
+    GMAPS_KEY: process.env.GMAPS_KEY,
   },
   images: {
     remotePatterns: [

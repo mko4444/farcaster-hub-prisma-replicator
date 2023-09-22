@@ -68,16 +68,12 @@ export class PrismaHubReplicator {
     this.subscriber.on("event", async (hubEvent) => {
       let message;
       if (isMergeMessageHubEvent(hubEvent)) {
-        // this.log.info(`[Sync] Processing merge event ${hubEvent.id}`);
         message = hubEvent.mergeMessageBody.message;
       } else if (isPruneMessageHubEvent(hubEvent)) {
-        // this.log.info(`[Sync] Processing prune event ${hubEvent.id}`);
         message = hubEvent.pruneMessageBody.message;
       } else if (isRevokeMessageHubEvent(hubEvent)) {
-        // this.log.info(`[Sync] Processing revoke event ${hubEvent.id}`);
         message = hubEvent.revokeMessageBody.message;
       } else {
-        // this.log.warn(`[Sync] Unknown type ${hubEvent.type} of event ${hubEvent.id}. Ignoring`);
         return;
       }
 
