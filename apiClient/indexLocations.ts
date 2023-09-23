@@ -45,6 +45,8 @@ export async function indexLocations() {
       where: { fid },
       create: {
         fid,
+        place_id,
+        description,
         location: {
           connectOrCreate: {
             where: { place_id },
@@ -63,6 +65,7 @@ export async function indexLocations() {
         },
       },
       update: {
+        description,
         location: place_id
           ? {
               connectOrCreate: {
