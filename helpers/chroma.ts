@@ -57,7 +57,6 @@ export const addEmbedding = async (
       metadatas,
     });
 
-    console.log("added to chroma", add);
     return add;
   } catch (e) {
     console.log(e);
@@ -78,7 +77,6 @@ export const removeEmbedding = async (id: string) => {
     const remove = await collection.delete({
       ids: [id],
     });
-    console.log("removed from chroma", remove);
 
     return remove;
   } catch (e) {
