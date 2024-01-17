@@ -85,4 +85,19 @@ export const removeEmbedding = async (id: string) => {
   }
 };
 
+export const updateEmbedding = async (id, metadatas) => {
+  if (!client || !collection) return false;
+  try {
+    const update = await collection.update({
+      ids: [id],
+      metadatas,
+    });
+
+    return update;
+  } catch (e) {
+    console.log(e);
+    return false;
+  }
+};
+
 export const chroma = client;

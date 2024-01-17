@@ -344,6 +344,7 @@ export class PrismaHubReplicator {
         case 1: // cast add
           txs.push(prisma.cast.upsert(parseCastAddMessage(...parseProps)));
           const user = await prisma.user.findUnique({ where: { fid } });
+
           await addEmbedding(hash, body.text, {
             fname: user?.fname,
             profile_pic: user?.pfp_url,
@@ -390,7 +391,9 @@ export class PrismaHubReplicator {
               parseUserDataAddMessage(...parseProps)
             )
           );
-          txs.push(prisma.user.upsert(parseUserDataMessage(...parseProps)));
+          txs.push(
+            prisma.user.upsert(await parseUserDataMessage(...parseProps))
+          );
           break;
       }
     }
