@@ -25,34 +25,51 @@ import { parseVerificationRemoveMessage } from "./helpers/parsers/parseVerificat
 import { parseVerificationAddMessage } from "./helpers/parsers/parseVerificationAddMessage";
 import { parseUserDataAddMessage } from "./helpers/parsers/parseUserDataAddMessage";
 
-import { MAX_PAGE_SIZE, MAX_JOB_CONCURRENCY, MAX_BATCH_SIZE, BATCH_INTERVAL } from "./constants";
+import {
+  MAX_PAGE_SIZE,
+  MAX_JOB_CONCURRENCY,
+  MAX_BATCH_SIZE,
+  BATCH_INTERVAL,
+} from "./constants";
 import prisma from "./prisma/client";
 import { PrismaPromise } from "@prisma/client";
+import { addEmbedding, removeEmbedding } from "./helpers/chroma";
 
 export class PrismaHubReplicator {
   private client: HubRpcClient;
   private subscriber: HubSubscriber;
 
-  constructor(private hub_address: string, private ssl: boolean, private log: Logger) {
-    this.client = this.ssl ? getSSLHubRpcClient(hub_address) : getInsecureHubRpcClient(hub_address);
+  constructor(
+    private hub_address: string,
+    private ssl: boolean,
+    private log: Logger
+  ) {
+    this.client = this.ssl
+      ? getSSLHubRpcClient(hub_address)
+      : getInsecureHubRpcClient(hub_address);
     this.subscriber = new HubSubscriber(this.client, log);
 
     let batchBuffer: any[] = [];
     let batchTimer: any = null;
 
-    const queue: queueAsPromised = fastq.promise(async (batchMessages: any[]) => {
-      this.log.info(`[Sync] Processing ${batchMessages.length} events from stream`);
-      await this.onMergeMessages(batchMessages.map((m) => m.message));
+    const queue: queueAsPromised = fastq.promise(
+      async (batchMessages: any[]) => {
+        this.log.info(
+          `[Sync] Processing ${batchMessages.length} events from stream`
+        );
+        await this.onMergeMessages(batchMessages.map((m) => m.message));
 
-      // Update the last event ID we processed
-      const lastEventId = batchMessages[batchMessages.length - 1].id;
+        // Update the last event ID we processed
+        const lastEventId = batchMessages[batchMessages.length - 1].id;
 
-      await prisma.hubSubscription.upsert({
-        where: { url: this.hub_address },
-        create: { url: this.hub_address, last_event_id: lastEventId },
-        update: { last_event_id: lastEventId },
-      });
-    }, MAX_JOB_CONCURRENCY);
+        await prisma.hubSubscription.upsert({
+          where: { url: this.hub_address },
+          create: { url: this.hub_address, last_event_id: lastEventId },
+          update: { last_event_id: lastEventId },
+        });
+      },
+      MAX_JOB_CONCURRENCY
+    );
 
     const processBatch = () => {
       if (batchBuffer.length > 0) {
@@ -103,14 +120,18 @@ export class PrismaHubReplicator {
     const infoResult = await this.client.getInfo({ dbStats: true });
 
     if (infoResult.isErr() || infoResult.value.dbStats === undefined) {
-      throw new Error(`Unable to get information about hub ${this.hub_address}`);
+      throw new Error(
+        `Unable to get information about hub ${this.hub_address}`
+      );
     }
 
     const { numMessages } = infoResult.value.dbStats;
 
     // Not technically true, since hubs don't return CastRemove/etc. messages,
     // but at least gives a rough ballpark of order of magnitude.
-    console.info(`[Backfill] Fetching messages from hub ${this.hub_address} (~${numMessages} messages)`);
+    console.info(
+      `[Backfill] Fetching messages from hub ${this.hub_address} (~${numMessages} messages)`
+    );
 
     // Process live events going forward, starting from the last event we
     // processed (if there was one).
@@ -123,28 +144,47 @@ export class PrismaHubReplicator {
     await this.backfill();
   }
   private async backfill() {
-    const maxFidResult = await this.client.getFids({ pageSize: 1, reverse: true });
-    const backfilled = await prisma.user.findMany({ where: { has_backfilled: true }, select: { fid: true } });
-    if (maxFidResult.isErr()) throw new Error("Unable to get max fid for backfill");
+    const maxFidResult = await this.client.getFids({
+      pageSize: 1,
+      reverse: true,
+    });
+    const backfilled = await prisma.user.findMany({
+      where: { has_backfilled: true },
+      select: { fid: true },
+    });
+    if (maxFidResult.isErr())
+      throw new Error("Unable to get max fid for backfill");
 
     const maxFid = maxFidResult.value.fids[0];
     let totalProcessed = 0;
     const startTime = Date.now();
 
-    const queue: queueAsPromised<{ fid: number }> = fastq.promise(async ({ fid }) => {
-      if (backfilled.find((u) => u.fid === fid)) {
-        return this.log.info(`[Backfill] Skipping FID ${fid} because it has already been backfilled`);
-      }
-      await this.processAllMessagesForFid(fid);
-      await prisma.user.update({ where: { fid }, data: { has_backfilled: true } });
+    const queue: queueAsPromised<{ fid: number }> = fastq.promise(
+      async ({ fid }) => {
+        if (backfilled.find((u) => u.fid === fid)) {
+          return this.log.info(
+            `[Backfill] Skipping FID ${fid} because it has already been backfilled`
+          );
+        }
+        await this.processAllMessagesForFid(fid);
+        await prisma.user.update({
+          where: { fid },
+          data: { has_backfilled: true },
+        });
 
-      totalProcessed += 1;
-      const elapsedMs = Date.now() - startTime;
-      const millisRemaining = Math.ceil((elapsedMs / totalProcessed) * (maxFid - totalProcessed));
-      console.info(
-        `[Backfill] Completed FID ${fid}/${maxFid}. Estimated time remaining: ${prettyMilliseconds(millisRemaining)}`
-      );
-    }, MAX_JOB_CONCURRENCY);
+        totalProcessed += 1;
+        const elapsedMs = Date.now() - startTime;
+        const millisRemaining = Math.ceil(
+          (elapsedMs / totalProcessed) * (maxFid - totalProcessed)
+        );
+        console.info(
+          `[Backfill] Completed FID ${fid}/${maxFid}. Estimated time remaining: ${prettyMilliseconds(
+            millisRemaining
+          )}`
+        );
+      },
+      MAX_JOB_CONCURRENCY
+    );
 
     for (let fid = 1; fid <= maxFid; fid++) {
       queue.push({ fid });
@@ -193,7 +233,11 @@ export class PrismaHubReplicator {
       yield messages;
 
       if (!pageToken?.length) break;
-      result = await this.client.getReactionsByFid({ pageSize, pageToken, fid });
+      result = await this.client.getReactionsByFid({
+        pageSize,
+        pageToken,
+        fid,
+      });
     }
   }
   private async *getLinksByFidInBatchesOf(fid: number, pageSize: number) {
@@ -226,7 +270,10 @@ export class PrismaHubReplicator {
       result = await this.client.getSignersByFid({ pageSize, pageToken, fid });
     }
   }
-  private async *getVerificationsByFidInBatchesOf(fid: number, pageSize: number) {
+  private async *getVerificationsByFidInBatchesOf(
+    fid: number,
+    pageSize: number
+  ) {
     let result = await this.client.getVerificationsByFid({ pageSize, fid });
     for (;;) {
       if (result.isErr()) {
@@ -238,7 +285,11 @@ export class PrismaHubReplicator {
       yield messages;
 
       if (!pageToken?.length) break;
-      result = await this.client.getVerificationsByFid({ pageSize, pageToken, fid });
+      result = await this.client.getVerificationsByFid({
+        pageSize,
+        pageToken,
+        fid,
+      });
     }
   }
   private async *getUserDataByFidInBatchesOf(fid: number, pageSize: number) {
@@ -261,7 +312,9 @@ export class PrismaHubReplicator {
 
     for await (const message of messages) {
       // @ts-ignore
-      let timestamp: Date = dayjs(fromFarcasterTime(message.data?.timestamp).value).format();
+      let timestamp: Date = dayjs(
+        fromFarcasterTime(message.data?.timestamp).value
+      ).format();
       let hash = bytesToHexString(message.hash).value;
       let fid = message.data?.fid;
       let body =
@@ -278,22 +331,38 @@ export class PrismaHubReplicator {
 
       if (!hash) continue;
 
-      let parseProps: [any, string, number, Date] = [body, hash, fid, timestamp];
+      let parseProps: [any, string, number, Date] = [
+        body,
+        hash,
+        fid,
+        timestamp,
+      ];
 
       switch (message.data.type) {
         case 0:
           break;
         case 1: // cast add
           txs.push(prisma.cast.upsert(parseCastAddMessage(...parseProps)));
+          const user = await prisma.user.findUnique({ where: { fid } });
+          await addEmbedding(hash, body.text, {
+            fname: user?.fname,
+            profile_pic: user?.pfp_url,
+            fid: user?.fid,
+          });
           break;
         case 2: // cast remove
           txs.push(prisma.cast.upsert(parseCastRemoveMessage(...parseProps)));
+          await removeEmbedding(hash);
           break;
         case 3: // reaction add
-          txs.push(prisma.reaction.upsert(parseReactionAddMessage(...parseProps)));
+          txs.push(
+            prisma.reaction.upsert(parseReactionAddMessage(...parseProps))
+          );
           break;
         case 4: // reaction remove
-          txs.push(prisma.reaction.upsert(parseReactionRemoveMessage(...parseProps)));
+          txs.push(
+            prisma.reaction.upsert(parseReactionRemoveMessage(...parseProps))
+          );
           break;
         case 5: // link add
           txs.push(prisma.link.upsert(parseLinkAddMessage(...parseProps)));
@@ -302,13 +371,25 @@ export class PrismaHubReplicator {
           txs.push(prisma.link.upsert(parseLinkRemoveMessage(...parseProps)));
           break;
         case 7: // verification add
-          txs.push(prisma.verification.upsert(parseVerificationAddMessage(...parseProps)));
+          txs.push(
+            prisma.verification.upsert(
+              parseVerificationAddMessage(...parseProps)
+            )
+          );
           break;
         case 8: // verification remove
-          txs.push(prisma.verification.update(parseVerificationRemoveMessage(...parseProps)));
+          txs.push(
+            prisma.verification.update(
+              parseVerificationRemoveMessage(...parseProps)
+            )
+          );
           break;
         case 11: // user data add
-          txs.push(prisma.userDataMessage.upsert(parseUserDataAddMessage(...parseProps)));
+          txs.push(
+            prisma.userDataMessage.upsert(
+              parseUserDataAddMessage(...parseProps)
+            )
+          );
           txs.push(prisma.user.upsert(parseUserDataMessage(...parseProps)));
           break;
       }
